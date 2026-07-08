@@ -4,13 +4,13 @@
 ![Java 21](https://img.shields.io/badge/Java-21-orange)
 ![Maven](https://img.shields.io/badge/Maven-3.9.6-green)
 
-Plugin de minijeu SpaceShip pour Minecraft Paper - Un jeu multi-zones en ligne façon vaisseau spatial. Percez le vaisseau ennemi zone par zone jusqu'à son cœur pour gagner!
+Plugin de minijeu SpaceShip pour Minecraft Paper - Un jeu multi-zones **Noir vs Blanc** en ligne façon vaisseau spatial. Percez le vaisseau ennemi zone par zone jusqu'à son cœur pour gagner!
 
 ---
 
 ## 🎮 Description
 
-SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mode multi-zones en ligne. Deux équipes s'affrontent dans un vaisseau spatial avec plusieurs zones à capturer. L'objectif est de progresser zone par zone jusqu'à atteindre le cœur du vaisseau ennemi pour remporter la victoire!
+SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mode multi-zones en ligne. Deux équipes (**Noir vs Blanc**) s'affrontent dans un vaisseau spatial avec plusieurs zones à capturer. L'objectif est de progresser zone par zone jusqu'à atteindre le cœur du vaisseau ennemi pour remporter la victoire!
 
 ## ✨ Fonctionnalités
 
@@ -21,7 +21,7 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 - Zone de lobby configurable
 
 ### ⚔️ Mode Équipe
-- Système d'équipes avec captures de zones
+- Système d'équipes **Noir vs Blanc** avec captures de zones
 - Progression linéaire à travers les zones
 - Protection des zones capturées
 - Objectif final: atteindre le cœur ennemi
@@ -127,10 +127,10 @@ Le JAR compilé sera dans `target/SpaceShip.jar`.
 ```
 Vaisseau spatial (exemple avec 5 zones):
 
-Équipe A                           Équipe B
+Équipe NOIR                         Équipe BLANC
 ┌─────────────────────────┐  ┌─────────────────────────┐
-│  Zone 5 (Cœur A)         │  │         Zone 1 (Cœur B) │
-│  [BUT Équipe A]          │  │         [BUT Équipe B]  │
+│  Zone 5 (Cœur Noir)      │  │         Zone 1 (Cœur Blanc) │
+│  [BUT Équipe Noir]       │  │         [BUT Équipe Blanc] │
 ├─────────────────────────┤  ├─────────────────────────┤
 │  Zone 4                  │  │         Zone 2          │
 ├─────────────────────────┤  ├─────────────────────────┤
