@@ -1,0 +1,23 @@
+name: SpaceShip
+version: 1.0.0
+main: com.spaceship.plugin.SpaceShipPlugin
+api-version: 1.21
+author: Claude
+description: Plugin de minijeu SpaceShip (variante de HikaBrain à plusieurs zones en ligne façon vaisseau) - percez le vaisseau ennemi zone par zone jusqu'à son cœur pour gagner
+
+commands:
+  ss:
+    description: Commande principale du plugin SpaceShip
+    usage: /ss <create|delete|list|arenas|setlobby|setzonecount|setspawn|delspawn|setgoal|setgamezone|start|stop|join|joinrandom|leave|info|stats|leaderboard>
+    aliases: [spaceship]
+  ssarenas:
+    description: Ouvre le GUI de sélection d'arène SpaceShip
+    usage: /ssarenas
+
+permissions:
+  spaceship.admin:
+    description: Permission pour administrer le jeu SpaceShip (hologramme, reset, setup arènes…)
+    default: op
+  spaceship.play:
+    description: Permission pour jouer au SpaceShip
+    default: true

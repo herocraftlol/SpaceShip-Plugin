@@ -1,0 +1,56 @@
+# ===========================================
+#         Configuration SpaceShip
+# ===========================================
+
+# Nombre de joueurs minimum pour lancer le compte à rebours du lobby
+min-players: 2
+
+# Nombre de joueurs maximum (au-delà, équilibrage par équipe)
+max-players: 16 # Valeur par défaut utilisée par toute arène sans max spécifique (voir /ss setmaxplayers)
+
+# Durée du compte à rebours du lobby dès que le nombre minimum de joueurs est atteint (en secondes)
+lobby-countdown-min-reached: 10
+
+# Durée du compte à rebours quand le lobby est plein (accélère encore plus le départ)
+lobby-countdown-fast: 10
+
+# Durée (en secondes) du compte à rebours entre chaque round, après qu'une zone a été percée
+round-reset-countdown: 5
+
+# Téléporte les joueurs au lobby au démarrage du plugin / fin de partie
+teleport-to-lobby-on-end: true
+
+# Restaure les joueurs à leur position d'avant le lobby à la fin de la partie
+restore-pre-lobby-location: true
+
+# Délai (secondes) avant de relancer un nouveau lobby après la fin d'une partie
+restart-delay: 5
+
+# ===========================================
+#         Configuration Scoreboard
+# ===========================================
+scoreboard:
+  # Titre du scoreboard (affiché en haut)
+  title: "&8[&b&lHEROCRAFT&8&l] &6&lSpaceShip"
+
+  # Nom du serveur affiché dans le scoreboard
+  server-name: "&b&lHEROCRAFT"
+
+  # Nom du jeu affiché dans le scoreboard
+  game-name: "&6&lSpaceShip"
+
+# Messages (couleurs avec & supportées)
+messages:
+  prefix: "&8[&bSpaceShip&8] &r"
+  join: "&aTu as rejoint la partie ! &7(%current%/%max%)"
+  leave: "&cTu as quitté la partie."
+  team-assigned: "&7Tu es dans l'équipe %team%"
+  team-changed: "&aTu as rejoint l'équipe %team%"
+  countdown-start: "&eLa partie commence dans &6%time%&e secondes !"
+  game-start: "&a&lLA PARTIE COMMENCE ! Percez le vaisseau ennemi jusqu'à son cœur !"
+  # %team% a percé une zone de plus (%depth%/%total% zones adverses percées)
+  point-scored: "&6%team% &epercent une zone du vaisseau adverse ! &7(%depth%/%total%)"
+  # %team% a repoussé l'adversaire jusqu'au centre du vaisseau
+  point-reset: "&6%team% &erepousse l'adversaire jusqu'au centre du vaisseau !"
+  game-end: "&a&lL'équipe %team% a atteint le cœur du vaisseau ennemi et a gagné la partie !"
+  not-enough-players: "&cPas assez de joueurs pour démarrer."
