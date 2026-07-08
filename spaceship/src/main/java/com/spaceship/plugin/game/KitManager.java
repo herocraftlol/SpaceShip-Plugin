@@ -84,7 +84,7 @@ public final class KitManager {
      * Utilisé au lobby pour permettre aux joueurs de changer d'équipe.
      */
     public static ItemStack createTeamSelectorItem(Team team) {
-        Material material = team == Team.RED ? Material.RED_TERRACOTTA : Material.BLUE_TERRACOTTA;
+        Material material = team == Team.BLACK ? Material.BLACK_TERRACOTTA : Material.WHITE_TERRACOTTA;
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -108,7 +108,7 @@ public final class KitManager {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return;
         
-        Material material = team == Team.RED ? Material.RED_TERRACOTTA : Material.BLUE_TERRACOTTA;
+        Material material = team == Team.BLACK ? Material.BLACK_TERRACOTTA : Material.WHITE_TERRACOTTA;
         item.setType(material);
         
         String teamName = team.getColoredName();

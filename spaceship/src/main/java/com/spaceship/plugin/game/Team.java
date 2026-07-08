@@ -4,11 +4,16 @@ import org.bukkit.ChatColor;
 import org.bukkit.Color;
 
 /**
- * Les deux équipes possibles dans une partie de SpaceShip.
+ * Les deux équipes possibles dans une partie de SpaceShip : Noir contre Blanc.
+ *
+ * Note : le texte de chat "noir" pur (ChatColor.BLACK) est quasiment invisible sur le
+ * fond noir du chat Minecraft. On utilise donc ChatColor.DARK_GRAY pour l'affichage
+ * textuel (nom coloré, tab list, scoreboard) de l'équipe BLACK, tout en gardant du vrai
+ * noir pour l'armure/les blocs/l'item de sélection d'équipe.
  */
 public enum Team {
-    RED(ChatColor.RED, "Rouge", Color.RED),
-    BLUE(ChatColor.BLUE, "Bleu", Color.BLUE);
+    BLACK(ChatColor.DARK_GRAY, "Noir", Color.BLACK),
+    WHITE(ChatColor.WHITE, "Blanc", Color.WHITE);
 
     private final ChatColor color;
     private final String displayName;
@@ -40,6 +45,6 @@ public enum Team {
      * Renvoie l'équipe opposée.
      */
     public Team opponent() {
-        return this == RED ? BLUE : RED;
+        return this == BLACK ? WHITE : BLACK;
     }
 }

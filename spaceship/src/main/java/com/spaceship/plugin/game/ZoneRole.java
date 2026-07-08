@@ -8,7 +8,7 @@ import java.util.Locale;
  * profondes dans le territoire d'une équipe).
  *
  * Rappel du layout (exemple à 5 zones, donc N=2 bases par équipe) :
- *   Base2_Rouge | Base1_Rouge | Mid | Base1_Bleu | Base2_Bleu
+ *   Base2_Noir | Base1_Noir | Mid | Base1_Blanc | Base2_Blanc
  *
  * Avec 7 zones (N=3) ou 9 zones (N=4), on ajoute simplement Base3 et/ou Base4 de
  * chaque côté :

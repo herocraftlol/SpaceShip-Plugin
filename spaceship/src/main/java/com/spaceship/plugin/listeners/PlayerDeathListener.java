@@ -26,8 +26,8 @@ public class PlayerDeathListener implements Listener {
         if (gm == null) return;
         if (!gm.isPlaying(victim)) return;
 
-        int teamSize = Math.max(gm.getPlayerCountForTeam(com.spaceship.plugin.game.Team.RED),
-                                gm.getPlayerCountForTeam(com.spaceship.plugin.game.Team.BLUE));
+        int teamSize = Math.max(gm.getPlayerCountForTeam(com.spaceship.plugin.game.Team.BLACK),
+                                gm.getPlayerCountForTeam(com.spaceship.plugin.game.Team.WHITE));
 
         Player killer = victim.getKiller();
 

@@ -30,9 +30,9 @@ import java.util.Collections;
  * L'état de la partie est représenté par un seul entier "frontier" :
  * -  0        = les deux équipes sont au Mid (neutre), c'est le début de partie ou une
  *               situation totalement remise à zéro.
- * -  +k (k>0) = l'équipe ROUGE a percé k zones dans le territoire BLEU (elle est
- *               actuellement stationnée à Base<k>_Bleu, en attente de percer Base<k+1>_Bleu).
- * -  -k (k>0) = l'équipe BLEUE a percé k zones dans le territoire ROUGE, symétriquement.
+ * -  +k (k>0) = l'équipe NOIRE a percé k zones dans le territoire BLANC (elle est
+ *               actuellement stationnée à Base<k>_Blanc, en attente de percer Base<k+1>_Blanc).
+ * -  -k (k>0) = l'équipe BLANCHE a percé k zones dans le territoire NOIR, symétriquement.
  *
  * Règles de percée (voir handleZoneCapture) :
  * - Si l'équipe qui marque est déjà en avantage (ou à égalité au Mid) et avance ENCORE plus
@@ -152,7 +152,7 @@ public class GameManager {
      * "en faveur" de cette équipe (0 si elle est en train de défendre ou à égalité).
      */
     public int getScore(Team team) {
-        if (team == Team.RED) {
+        if (team == Team.BLACK) {
             return Math.max(frontier, 0);
         } else {
             return Math.max(-frontier, 0);
@@ -258,9 +258,9 @@ public class GameManager {
     }
 
     private Team pickBalancedTeam() {
-        long redCount = playerTeams.values().stream().filter(t -> t == Team.RED).count();
-        long blueCount = playerTeams.values().stream().filter(t -> t == Team.BLUE).count();
-        return redCount <= blueCount ? Team.RED : Team.BLUE;
+        long blackCount = playerTeams.values().stream().filter(t -> t == Team.BLACK).count();
+        long whiteCount = playerTeams.values().stream().filter(t -> t == Team.WHITE).count();
+        return blackCount <= whiteCount ? Team.BLACK : Team.WHITE;
     }
 
     public boolean changePlayerTeam(Player player, Team newTeam) {
@@ -325,9 +325,9 @@ public class GameManager {
     }
 
     private boolean bothTeamsHavePlayers() {
-        long redCount = playerTeams.values().stream().filter(t -> t == Team.RED).count();
-        long blueCount = playerTeams.values().stream().filter(t -> t == Team.BLUE).count();
-        return redCount > 0 && blueCount > 0;
+        long blackCount = playerTeams.values().stream().filter(t -> t == Team.BLACK).count();
+        long whiteCount = playerTeams.values().stream().filter(t -> t == Team.WHITE).count();
+        return blackCount > 0 && whiteCount > 0;
     }
 
     private void startCountdown() {
@@ -450,9 +450,9 @@ public class GameManager {
      * Détermine le spawn à utiliser pour une équipe donnée, en fonction de la position
      * actuelle de la ligne de front :
      * - frontier == 0 : tout le monde spawn au Mid.
-     * - frontier > 0 (avantage ROUGE) : ROUGE spawn en avant, sur Base<frontier>_Bleu
-     *   (sa base d'attaque la plus profonde) ; BLEU, repoussé, repart du Mid.
-     * - frontier < 0 (avantage BLEU) : symétrique.
+     * - frontier > 0 (avantage NOIR) : NOIR spawn en avant, sur Base<frontier>_Blanc
+     *   (sa base d'attaque la plus profonde) ; BLANC, repoussé, repart du Mid.
+     * - frontier < 0 (avantage BLANC) : symétrique.
      */
     public Location getCurrentSpawnFor(Team team) {
         return resolveSpawnForRound(team);
@@ -463,17 +463,17 @@ public class GameManager {
             return arena.getMidSpawn(team);
         }
         if (frontier > 0) {
-            if (team == Team.RED) {
-                return arena.getBaseSpawn(Team.BLUE, frontier);
+            if (team == Team.BLACK) {
+                return arena.getBaseSpawn(Team.WHITE, frontier);
             } else {
-                return arena.getMidSpawn(Team.BLUE);
+                return arena.getMidSpawn(Team.WHITE);
             }
         } else {
             int k = -frontier;
-            if (team == Team.BLUE) {
-                return arena.getBaseSpawn(Team.RED, k);
+            if (team == Team.WHITE) {
+                return arena.getBaseSpawn(Team.BLACK, k);
             } else {
-                return arena.getMidSpawn(Team.RED);
+                return arena.getMidSpawn(Team.BLACK);
             }
         }
     }
@@ -550,7 +550,7 @@ public class GameManager {
      */
     private int[] getActiveTargetZone(Team team) {
         int n = getBasesPerSide();
-        int signedAdvantage = (team == Team.RED) ? frontier : -frontier;
+        int signedAdvantage = (team == Team.BLACK) ? frontier : -frontier;
 
         if (signedAdvantage >= 0) {
             int nextDepth = signedAdvantage + 1;
@@ -566,10 +566,10 @@ public class GameManager {
     private BukkitTask captureSchedulerTask;
 
     // Stats de la partie en cours (par équipe)
-    private int redKills = 0;
-    private int redDeaths = 0;
-    private int blueKills = 0;
-    private int blueDeaths = 0;
+    private int blackKills = 0;
+    private int blackDeaths = 0;
+    private int whiteKills = 0;
+    private int whiteDeaths = 0;
 
     // Stats de la partie en cours (par joueur)
     private Map<UUID, Integer> playerKills = new HashMap<>();
@@ -596,7 +596,7 @@ public class GameManager {
      */
     private void handleZoneCapture(Team scoringTeam) {
         int n = getBasesPerSide();
-        int signedAdvantage = (scoringTeam == Team.RED) ? frontier : -frontier;
+        int signedAdvantage = (scoringTeam == Team.BLACK) ? frontier : -frontier;
 
         if (signedAdvantage >= 0) {
             int newDepth = signedAdvantage + 1;
@@ -607,7 +607,7 @@ public class GameManager {
                 return;
             }
 
-            frontier = (scoringTeam == Team.RED) ? newDepth : -newDepth;
+            frontier = (scoringTeam == Team.BLACK) ? newDepth : -newDepth;
 
             broadcast(plugin.getConfig().getString("messages.point-scored", "")
                     .replace("%team%", scoringTeam.getColoredName())
@@ -695,14 +695,14 @@ public class GameManager {
     }
 
     private void checkForfeit() {
-        long redCount = playerTeams.values().stream().filter(t -> t == Team.RED).count();
-        long blueCount = playerTeams.values().stream().filter(t -> t == Team.BLUE).count();
+        long blackCount = playerTeams.values().stream().filter(t -> t == Team.BLACK).count();
+        long whiteCount = playerTeams.values().stream().filter(t -> t == Team.WHITE).count();
 
-        if (redCount == 0 && blueCount > 0) {
-            endGame(Team.BLUE);
-        } else if (blueCount == 0 && redCount > 0) {
-            endGame(Team.RED);
-        } else if (redCount == 0 && blueCount == 0) {
+        if (blackCount == 0 && whiteCount > 0) {
+            endGame(Team.WHITE);
+        } else if (whiteCount == 0 && blackCount > 0) {
+            endGame(Team.BLACK);
+        } else if (blackCount == 0 && whiteCount == 0) {
             forceStopToLobby();
         }
     }
@@ -718,7 +718,7 @@ public class GameManager {
 
         stopCaptureScheduler();
 
-        int teamSize = Math.max(getPlayerCountForTeam(Team.RED), getPlayerCountForTeam(Team.BLUE));
+        int teamSize = Math.max(getPlayerCountForTeam(Team.BLACK), getPlayerCountForTeam(Team.WHITE));
         plugin.getStatsManager().addWin(winner, teamSize);
 
         for (Map.Entry<UUID, Team> entry : playerTeams.entrySet()) {
@@ -732,8 +732,8 @@ public class GameManager {
 
         plugin.getLeaderboardManager().refreshAll();
 
-        List<String> redPlayers = new ArrayList<>();
-        List<String> bluePlayers = new ArrayList<>();
+        List<String> blackPlayers = new ArrayList<>();
+        List<String> whitePlayers = new ArrayList<>();
 
         for (UUID uuid : playerTeams.keySet()) {
             Player player = Bukkit.getPlayer(uuid);
@@ -743,10 +743,10 @@ public class GameManager {
                 player.setFlySpeed(0.1f);
                 player.setGameMode(GameMode.SPECTATOR);
 
-                if (playerTeams.get(uuid) == Team.RED) {
-                    redPlayers.add(player.getName());
+                if (playerTeams.get(uuid) == Team.BLACK) {
+                    blackPlayers.add(player.getName());
                 } else {
-                    bluePlayers.add(player.getName());
+                    whitePlayers.add(player.getName());
                 }
             }
         }
@@ -766,8 +766,8 @@ public class GameManager {
                 message.append(ChatColor.GOLD).append("  VICTOIRE DES ").append(winner.getColoredName()).append("\n");
                 message.append(ChatColor.GOLD).append("------------------------------\n");
                 message.append("\n");
-                message.append(ChatColor.RED).append("  ROUGES: ").append(redPlayers.isEmpty() ? "(aucun)" : String.join(", ", redPlayers)).append("\n");
-                message.append(ChatColor.BLUE).append("  BLEUS: ").append(bluePlayers.isEmpty() ? "(aucun)" : String.join(", ", bluePlayers)).append("\n");
+                message.append(ChatColor.DARK_GRAY).append("  NOIRS: ").append(blackPlayers.isEmpty() ? "(aucun)" : String.join(", ", blackPlayers)).append("\n");
+                message.append(ChatColor.WHITE).append("  BLANCS: ").append(whitePlayers.isEmpty() ? "(aucun)" : String.join(", ", whitePlayers)).append("\n");
 
                 player.sendMessage(message.toString());
             }
@@ -851,8 +851,8 @@ public class GameManager {
     }
 
     private void launchVictoryFireworks(Team winner, int durationSeconds) {
-        Color primary = (winner == Team.RED) ? Color.RED : Color.BLUE;
-        Color secondary = (winner == Team.RED) ? Color.ORANGE : Color.AQUA;
+        Color primary = (winner == Team.BLACK) ? Color.BLACK : Color.WHITE;
+        Color secondary = (winner == Team.BLACK) ? Color.GRAY : Color.SILVER;
 
         int salves = Math.max(1, durationSeconds - 1);
         for (int i = 0; i < salves; i++) {
@@ -901,17 +901,17 @@ public class GameManager {
 
     // ================= STATS PARTIE =================
 
-    public int getRedKills() { return redKills; }
-    public int getRedDeaths() { return redDeaths; }
-    public int getBlueKills() { return blueKills; }
-    public int getBlueDeaths() { return blueDeaths; }
+    public int getBlackKills() { return blackKills; }
+    public int getBlackDeaths() { return blackDeaths; }
+    public int getWhiteKills() { return whiteKills; }
+    public int getWhiteDeaths() { return whiteDeaths; }
 
     public int getPlayerKills(UUID uuid) { return playerKills.getOrDefault(uuid, 0); }
     public int getPlayerDeaths(UUID uuid) { return playerDeaths.getOrDefault(uuid, 0); }
 
     public void addKill(Team team) {
-        if (team == Team.RED) redKills++;
-        else blueKills++;
+        if (team == Team.BLACK) blackKills++;
+        else whiteKills++;
     }
 
     public void addPlayerKill(UUID uuid) {
@@ -919,8 +919,8 @@ public class GameManager {
     }
 
     public void addDeath(Team team) {
-        if (team == Team.RED) redDeaths++;
-        else blueDeaths++;
+        if (team == Team.BLACK) blackDeaths++;
+        else whiteDeaths++;
     }
 
     public void addPlayerDeath(UUID uuid) {
@@ -928,10 +928,10 @@ public class GameManager {
     }
 
     public void resetStats() {
-        redKills = 0;
-        redDeaths = 0;
-        blueKills = 0;
-        blueDeaths = 0;
+        blackKills = 0;
+        blackDeaths = 0;
+        whiteKills = 0;
+        whiteDeaths = 0;
         playerKills.clear();
         playerDeaths.clear();
     }

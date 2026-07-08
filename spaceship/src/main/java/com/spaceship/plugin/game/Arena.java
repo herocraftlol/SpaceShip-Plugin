@@ -21,7 +21,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * en plus profondes dans le territoire de chaque équipe.
  *
  * Exemple à 5 zones (zoneCount=5, donc 2 bases par équipe) :
- *   Base2_Rouge | Base1_Rouge | Mid | Base1_Bleu | Base2_Bleu
+ *   Base2_Noir | Base1_Noir | Mid | Base1_Blanc | Base2_Blanc
  *
  * Chaque zone Base<k> d'une équipe possède :
  * - une ou plusieurs positions de spawn (utilisées par l'équipe ADVERSE quand elle a
@@ -56,12 +56,12 @@ public class Arena {
     private int maxPlayers = -1;
 
     public Arena() {
-        midSpawns.put(Team.RED, new ArrayList<>());
-        midSpawns.put(Team.BLUE, new ArrayList<>());
-        baseSpawns.put(Team.RED, new HashMap<>());
-        baseSpawns.put(Team.BLUE, new HashMap<>());
-        baseGoals.put(Team.RED, new HashMap<>());
-        baseGoals.put(Team.BLUE, new HashMap<>());
+        midSpawns.put(Team.BLACK, new ArrayList<>());
+        midSpawns.put(Team.WHITE, new ArrayList<>());
+        baseSpawns.put(Team.BLACK, new HashMap<>());
+        baseSpawns.put(Team.WHITE, new HashMap<>());
+        baseGoals.put(Team.BLACK, new HashMap<>());
+        baseGoals.put(Team.WHITE, new HashMap<>());
     }
 
     // ================= ZONE COUNT / N =================
@@ -129,7 +129,7 @@ public class Arena {
      */
     public boolean isFullyConfigured() {
         if (lobbySpawn == null) return false;
-        if (midSpawns.get(Team.RED).isEmpty() || midSpawns.get(Team.BLUE).isEmpty()) return false;
+        if (midSpawns.get(Team.BLACK).isEmpty() || midSpawns.get(Team.WHITE).isEmpty()) return false;
 
         int n = getBasesPerSide();
         for (Team team : Team.values()) {
@@ -262,8 +262,8 @@ public class Arena {
         config.set("arena.zonecount", zoneCount);
 
         config.set("arena.mid", null);
-        saveSpawnList(config, "arena.mid.red", midSpawns.get(Team.RED));
-        saveSpawnList(config, "arena.mid.blue", midSpawns.get(Team.BLUE));
+        saveSpawnList(config, "arena.mid.black", midSpawns.get(Team.BLACK));
+        saveSpawnList(config, "arena.mid.white", midSpawns.get(Team.WHITE));
 
         config.set("arena.bases", null);
         for (Team team : Team.values()) {
@@ -295,10 +295,10 @@ public class Arena {
             zoneCount = 5;
         }
 
-        midSpawns.get(Team.RED).clear();
-        midSpawns.get(Team.RED).addAll(loadSpawnList(config, "arena.mid.red"));
-        midSpawns.get(Team.BLUE).clear();
-        midSpawns.get(Team.BLUE).addAll(loadSpawnList(config, "arena.mid.blue"));
+        midSpawns.get(Team.BLACK).clear();
+        midSpawns.get(Team.BLACK).addAll(loadSpawnList(config, "arena.mid.black"));
+        midSpawns.get(Team.WHITE).clear();
+        midSpawns.get(Team.WHITE).addAll(loadSpawnList(config, "arena.mid.white"));
 
         for (Team team : Team.values()) {
             baseSpawns.get(team).clear();

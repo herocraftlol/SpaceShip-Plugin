@@ -129,11 +129,11 @@ public class ScoreboardManager {
      * et le K/D personnel du joueur.
      */
     private void addPlayerSidebarLines(Scoreboard board, Objective objective, Player player, GameManager gm) {
-        com.spaceship.plugin.game.Team RED = com.spaceship.plugin.game.Team.RED;
-        com.spaceship.plugin.game.Team BLUE = com.spaceship.plugin.game.Team.BLUE;
+        com.spaceship.plugin.game.Team BLACK = com.spaceship.plugin.game.Team.BLACK;
+        com.spaceship.plugin.game.Team WHITE = com.spaceship.plugin.game.Team.WHITE;
 
-        int redPlayers = gm.getPlayerCountForTeam(RED);
-        int bluePlayers = gm.getPlayerCountForTeam(BLUE);
+        int blackPlayers = gm.getPlayerCountForTeam(BLACK);
+        int whitePlayers = gm.getPlayerCountForTeam(WHITE);
 
         // K/D personnel du joueur (kills / deaths, ou kills si aucune mort -> ratio standard)
         int kills = gm.getPlayerKills(player.getUniqueId());
@@ -150,8 +150,8 @@ public class ScoreboardManager {
             "&6&lSpaceShip",
             "&7" + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500,
             "&fVaisseau: " + progressBar,
-            "&c\u2764 Rouge: &7(&c" + redPlayers + " joueur" + (redPlayers == 1 ? "" : "s") + "&7)",
-            "&9\u2764 Bleu: &7(&9" + bluePlayers + " joueur" + (bluePlayers == 1 ? "" : "s") + "&7)",
+            "&8\u2764 Noir: &7(&8" + blackPlayers + " joueur" + (blackPlayers == 1 ? "" : "s") + "&7)",
+            "&f\u2764 Blanc: &7(&f" + whitePlayers + " joueur" + (whitePlayers == 1 ? "" : "s") + "&7)",
             "&7" + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500 + (char) 0x2500,
             "&fTon K/D: &a" + kills + "&7/&c" + deaths + " &8(&a" + kdStr + "&8)"
         };
@@ -181,19 +181,20 @@ public class ScoreboardManager {
     /**
      * Construit une barre "[carrés]" représentant la position actuelle de la ligne de
      * front le long du vaisseau (voir GameManager#getFrontier / #getBasesPerSide).
-     * Un carré bleu plein = zone tenue par les Bleus, rouge plein = zone tenue par les
-     * Rouges, le losange blanc au centre = le Mid neutre.
+     * Un carré blanc plein = zone tenue par les Blancs, noir (gris foncé, pour rester
+     * visible) plein = zone tenue par les Noirs, le losange gris clair au centre = le
+     * Mid neutre.
      */
     private String buildProgressBar(GameManager gm) {
         int n = gm.getBasesPerSide();
         int frontier = gm.getFrontier();
         StringBuilder sb = new StringBuilder();
         for (int k = n; k >= 1; k--) {
-            sb.append(frontier <= -k ? "&9\u25a0" : "&8\u25a1");
+            sb.append(frontier <= -k ? "&f\u25a0" : "&7\u25a1");
         }
-        sb.append(frontier == 0 ? "&f\u25c6" : "&8\u25a1");
+        sb.append(frontier == 0 ? "&7\u25c6" : "&7\u25a1");
         for (int k = 1; k <= n; k++) {
-            sb.append(frontier >= k ? "&c\u25a0" : "&8\u25a1");
+            sb.append(frontier >= k ? "&8\u25a0" : "&7\u25a1");
         }
         return sb.toString();
     }

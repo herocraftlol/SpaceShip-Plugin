@@ -47,8 +47,8 @@ public class StatsManager {
     // ── Stats équipes par mode ─────────────────────────────────────────────────
 
     private static class ModeStats {
-        int redWins, blueWins, redKills, redDeaths, blueKills, blueDeaths;
-        void reset() { redWins = blueWins = redKills = redDeaths = blueKills = blueDeaths = 0; }
+        int blackWins, whiteWins, blackKills, blackDeaths, whiteKills, whiteDeaths;
+        void reset() { blackWins = whiteWins = blackKills = blackDeaths = whiteKills = whiteDeaths = 0; }
     }
 
     // ── Stats individuelles par joueur ─────────────────────────────────────────
@@ -122,12 +122,12 @@ public class StatsManager {
 
         for (GameMode m : GameMode.values()) {
             ModeStats s  = modes.get(m);
-            s.redWins    = statsConfig.getInt(mKey(m, "wins.red"),    0);
-            s.blueWins   = statsConfig.getInt(mKey(m, "wins.blue"),   0);
-            s.redKills   = statsConfig.getInt(mKey(m, "kills.red"),   0);
-            s.redDeaths  = statsConfig.getInt(mKey(m, "deaths.red"),  0);
-            s.blueKills  = statsConfig.getInt(mKey(m, "kills.blue"),  0);
-            s.blueDeaths = statsConfig.getInt(mKey(m, "deaths.blue"), 0);
+            s.blackWins    = statsConfig.getInt(mKey(m, "wins.black"),    0);
+            s.whiteWins   = statsConfig.getInt(mKey(m, "wins.white"),   0);
+            s.blackKills   = statsConfig.getInt(mKey(m, "kills.black"),   0);
+            s.blackDeaths  = statsConfig.getInt(mKey(m, "deaths.black"),  0);
+            s.whiteKills  = statsConfig.getInt(mKey(m, "kills.white"),  0);
+            s.whiteDeaths = statsConfig.getInt(mKey(m, "deaths.white"), 0);
         }
 
         playerStats.clear();
@@ -166,12 +166,12 @@ public class StatsManager {
 
         for (GameMode m : GameMode.values()) {
             ModeStats s = modes.get(m);
-            statsConfig.set(mKey(m, "wins.red"),    s.redWins);
-            statsConfig.set(mKey(m, "wins.blue"),   s.blueWins);
-            statsConfig.set(mKey(m, "kills.red"),   s.redKills);
-            statsConfig.set(mKey(m, "deaths.red"),  s.redDeaths);
-            statsConfig.set(mKey(m, "kills.blue"),  s.blueKills);
-            statsConfig.set(mKey(m, "deaths.blue"), s.blueDeaths);
+            statsConfig.set(mKey(m, "wins.black"),    s.blackWins);
+            statsConfig.set(mKey(m, "wins.white"),   s.whiteWins);
+            statsConfig.set(mKey(m, "kills.black"),   s.blackKills);
+            statsConfig.set(mKey(m, "deaths.black"),  s.blackDeaths);
+            statsConfig.set(mKey(m, "kills.white"),  s.whiteKills);
+            statsConfig.set(mKey(m, "deaths.white"), s.whiteDeaths);
         }
 
         statsConfig.set("players", null);
@@ -211,7 +211,7 @@ public class StatsManager {
     public void addWin(Team winner, int playersPerTeam) {
         GameMode m  = GameMode.fromTeamSize(playersPerTeam);
         ModeStats s = modes.get(m);
-        if (winner == Team.RED) s.redWins++; else s.blueWins++;
+        if (winner == Team.BLACK) s.blackWins++; else s.whiteWins++;
         totalGames++;
         saveStats();
     }
@@ -219,14 +219,14 @@ public class StatsManager {
 
     public void addKill(Team team, int playersPerTeam) {
         ModeStats s = modes.get(GameMode.fromTeamSize(playersPerTeam));
-        if (team == Team.RED) s.redKills++; else s.blueKills++;
+        if (team == Team.BLACK) s.blackKills++; else s.whiteKills++;
         saveStats();
     }
     public void addKill(Team team) { addKill(team, 1); }
 
     public void addDeath(Team team, int playersPerTeam) {
         ModeStats s = modes.get(GameMode.fromTeamSize(playersPerTeam));
-        if (team == Team.RED) s.redDeaths++; else s.blueDeaths++;
+        if (team == Team.BLACK) s.blackDeaths++; else s.whiteDeaths++;
         saveStats();
     }
     public void addDeath(Team team) { addDeath(team, 1); }
@@ -265,33 +265,33 @@ public class StatsManager {
 
     // ── Accesseurs équipes globaux ─────────────────────────────────────────────
 
-    public int getRedWins()    { return modes.values().stream().mapToInt(s -> s.redWins).sum(); }
-    public int getBlueWins()   { return modes.values().stream().mapToInt(s -> s.blueWins).sum(); }
-    public int getRedKills()   { return modes.values().stream().mapToInt(s -> s.redKills).sum(); }
-    public int getBlueKills()  { return modes.values().stream().mapToInt(s -> s.blueKills).sum(); }
-    public int getRedDeaths()  { return modes.values().stream().mapToInt(s -> s.redDeaths).sum(); }
-    public int getBlueDeaths() { return modes.values().stream().mapToInt(s -> s.blueDeaths).sum(); }
+    public int getBlackWins()    { return modes.values().stream().mapToInt(s -> s.blackWins).sum(); }
+    public int getWhiteWins()   { return modes.values().stream().mapToInt(s -> s.whiteWins).sum(); }
+    public int getBlackKills()   { return modes.values().stream().mapToInt(s -> s.blackKills).sum(); }
+    public int getWhiteKills()  { return modes.values().stream().mapToInt(s -> s.whiteKills).sum(); }
+    public int getBlackDeaths()  { return modes.values().stream().mapToInt(s -> s.blackDeaths).sum(); }
+    public int getWhiteDeaths() { return modes.values().stream().mapToInt(s -> s.whiteDeaths).sum(); }
     public int getTotalGames()    { return totalGames; }
     public int getTotalCaptures() { return totalCaptures; }
 
-    public double getRedKD()  { int d=getRedDeaths(), k=getRedKills();   return d==0?k:Math.round((double)k/d*100)/100.0; }
-    public double getBlueKD() { int d=getBlueDeaths(), k=getBlueKills(); return d==0?k:Math.round((double)k/d*100)/100.0; }
+    public double getBlackKD()  { int d=getBlackDeaths(), k=getBlackKills();   return d==0?k:Math.round((double)k/d*100)/100.0; }
+    public double getWhiteKD() { int d=getWhiteDeaths(), k=getWhiteKills(); return d==0?k:Math.round((double)k/d*100)/100.0; }
 
     // ── Accesseurs équipes par mode ────────────────────────────────────────────
 
-    public int getRedWins(GameMode m)    { return modes.get(m).redWins; }
-    public int getBlueWins(GameMode m)   { return modes.get(m).blueWins; }
-    public int getRedKills(GameMode m)   { return modes.get(m).redKills; }
-    public int getBlueKills(GameMode m)  { return modes.get(m).blueKills; }
-    public int getRedDeaths(GameMode m)  { return modes.get(m).redDeaths; }
-    public int getBlueDeaths(GameMode m) { return modes.get(m).blueDeaths; }
+    public int getBlackWins(GameMode m)    { return modes.get(m).blackWins; }
+    public int getWhiteWins(GameMode m)   { return modes.get(m).whiteWins; }
+    public int getBlackKills(GameMode m)   { return modes.get(m).blackKills; }
+    public int getWhiteKills(GameMode m)  { return modes.get(m).whiteKills; }
+    public int getBlackDeaths(GameMode m)  { return modes.get(m).blackDeaths; }
+    public int getWhiteDeaths(GameMode m) { return modes.get(m).whiteDeaths; }
 
-    public double getRedKD(GameMode m) {
-        int d=modes.get(m).redDeaths, k=modes.get(m).redKills;
+    public double getBlackKD(GameMode m) {
+        int d=modes.get(m).blackDeaths, k=modes.get(m).blackKills;
         return d==0?k:Math.round((double)k/d*100)/100.0;
     }
-    public double getBlueKD(GameMode m) {
-        int d=modes.get(m).blueDeaths, k=modes.get(m).blueKills;
+    public double getWhiteKD(GameMode m) {
+        int d=modes.get(m).whiteDeaths, k=modes.get(m).whiteKills;
         return d==0?k:Math.round((double)k/d*100)/100.0;
     }
 
@@ -337,10 +337,10 @@ public class StatsManager {
 
     public Map<String, Object> getAllStats() {
         Map<String, Object> s = new HashMap<>();
-        s.put("red_wins",  getRedWins());  s.put("blue_wins",  getBlueWins());
-        s.put("red_kills", getRedKills()); s.put("red_deaths", getRedDeaths());
-        s.put("blue_kills",getBlueKills());s.put("blue_deaths",getBlueDeaths());
-        s.put("red_kd",    getRedKD());    s.put("blue_kd",    getBlueKD());
+        s.put("black_wins",  getBlackWins());  s.put("white_wins",  getWhiteWins());
+        s.put("black_kills", getBlackKills()); s.put("black_deaths", getBlackDeaths());
+        s.put("white_kills",getWhiteKills());s.put("white_deaths",getWhiteDeaths());
+        s.put("black_kd",    getBlackKD());    s.put("white_kd",    getWhiteKD());
         s.put("total_games", totalGames);  s.put("total_captures", totalCaptures);
         return s;
     }

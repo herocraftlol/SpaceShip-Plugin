@@ -36,9 +36,9 @@ import java.util.*;
  *   /ss list                                                  - liste toutes les arènes
  *   /ss setlobby <nom>                                        - définit le lobby (à ta position)
  *   /ss setzonecount <nom> <5|7|9>                            - définit le nombre de zones du vaisseau
- *   /ss setspawn <nom> <red|blue> <mid|base1|base2|base3|base4> <index> - définit/remplace un spawn de zone
- *   /ss delspawn <nom> <red|blue> <mid|base1|base2|base3|base4> <index> - supprime un spawn de zone
- *   /ss setgoal <nom> <red|blue> <base1|base2|base3|base4> <pos1|pos2>  - définit le but (zone de capture) d'une base
+ *   /ss setspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> - définit/remplace un spawn de zone
+ *   /ss delspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> - supprime un spawn de zone
+ *   /ss setgoal <nom> <black|white> <base1|base2|base3|base4> <pos1|pos2>  - définit le but (zone de capture) d'une base
  *   /ss setgamezone <nom> <pos1|pos2>                         - définit + capture la zone de jeu protégée
  *   /ss setmaxplayers <nom> <nombre>                          - définit le max de joueurs de l'arène (0 = global)
  *   /ss join <nom>                                            - rejoindre une arène
@@ -250,7 +250,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
     private void handleSetSpawn(CommandSender sender, String[] args) {
         if (!checkAdminAndPlayer(sender)) return;
         if (args.length < 5) {
-            MessageUtil.send(sender, "&cUsage: /ss setspawn <nom> <red|blue> <mid|base1|base2|base3|base4> <index>");
+            MessageUtil.send(sender, "&cUsage: /ss setspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index>");
             MessageUtil.send(sender, "&7L'index commence à 1. Utilise le prochain index disponible pour ajouter un nouveau spawn.");
             return;
         }
@@ -260,7 +260,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
 
         Team team = parseTeam(args[2]);
         if (team == null) {
-            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'red' ou 'blue'.");
+            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'black' ou 'white'.");
             return;
         }
 
@@ -295,7 +295,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 5) {
-            MessageUtil.send(sender, "&cUsage: /ss delspawn <nom> <red|blue> <mid|base1|base2|base3|base4> <index>");
+            MessageUtil.send(sender, "&cUsage: /ss delspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index>");
             return;
         }
         GameManager gm = resolveArena(sender, args, 1);
@@ -303,7 +303,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
 
         Team team = parseTeam(args[2]);
         if (team == null) {
-            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'red' ou 'blue'.");
+            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'black' ou 'white'.");
             return;
         }
 
@@ -336,7 +336,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
     private void handleSetGoal(CommandSender sender, String[] args) {
         if (!checkAdminAndPlayer(sender)) return;
         if (args.length < 5) {
-            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <red|blue> <base1|base2|base3|base4> <pos1|pos2>");
+            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <black|white> <base1|base2|base3|base4> <pos1|pos2>");
             return;
         }
         GameManager gm = resolveArena(sender, args, 1);
@@ -345,7 +345,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
 
         Team team = parseTeam(args[2]);
         if (team == null) {
-            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'red' ou 'blue'.");
+            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'black' ou 'white'.");
             return;
         }
 
@@ -382,7 +382,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
 
             MessageUtil.send(sender, "&aBut de " + team.getColoredName() + " " + role.getLabel() + " &asur '" + args[1] + "' défini avec succès !");
         } else {
-            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <red|blue> <base1|base2|base3|base4> <pos1|pos2>");
+            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <black|white> <base1|base2|base3|base4> <pos1|pos2>");
         }
     }
 
@@ -582,12 +582,12 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
                 + (arena.getMaxPlayers() > 0 ? " &8(spécifique)" : " &8(global)"));
         MessageUtil.send(sender, "&7Map configurée : " + (arena.isFullyConfigured() ? "&aOui" : "&cNon"));
         MessageUtil.send(sender, "&7Nombre de zones : &f" + arena.getZoneCount() + " &7(" + n + " base(s) par équipe)");
-        MessageUtil.send(sender, "&7Spawns Mid : &c" + arena.getMidSpawnCount(Team.RED) + " rouge(s) &7/ &9" + arena.getMidSpawnCount(Team.BLUE) + " bleu(s)");
+        MessageUtil.send(sender, "&7Spawns Mid : &8" + arena.getMidSpawnCount(Team.BLACK) + " noir(s) &7/ &f" + arena.getMidSpawnCount(Team.WHITE) + " blanc(s)");
         for (int k = 1; k <= n; k++) {
-            MessageUtil.send(sender, "&7Base" + k + " : &crouge spawns=" + arena.getBaseSpawnCount(Team.RED, k)
-                    + " but=" + (arena.getBaseGoal(Team.RED, k) != null ? "&aOK" : "&cmanquant")
-                    + " &7/ &9bleu spawns=" + arena.getBaseSpawnCount(Team.BLUE, k)
-                    + " but=" + (arena.getBaseGoal(Team.BLUE, k) != null ? "&aOK" : "&cmanquant"));
+            MessageUtil.send(sender, "&7Base" + k + " : &8noir spawns=" + arena.getBaseSpawnCount(Team.BLACK, k)
+                    + " but=" + (arena.getBaseGoal(Team.BLACK, k) != null ? "&aOK" : "&cmanquant")
+                    + " &7/ &fblanc spawns=" + arena.getBaseSpawnCount(Team.WHITE, k)
+                    + " but=" + (arena.getBaseGoal(Team.WHITE, k) != null ? "&aOK" : "&cmanquant"));
         }
         MessageUtil.send(sender, "&7Zone de jeu (protection) : " + (gm.getArenaSnapshot().isCaptured() ? "&aOui" : "&cNon configurée"));
         MessageUtil.send(sender, "&7Ligne de front : " + buildFrontierBar(gm));
@@ -595,18 +595,19 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
 
     /**
      * Construit une petite barre textuelle représentant la position actuelle de la
-     * ligne de front le long du vaisseau, ex: [R][R][ ][B][ ] avec la case courante en surbrillance.
+     * ligne de front le long du vaisseau, ex: [W][W][M][N][ ] avec la case courante en surbrillance.
+     * W = Blancs, N = Noirs, M = Mid (neutre).
      */
     private String buildFrontierBar(GameManager gm) {
         int n = gm.getBasesPerSide();
         int frontier = gm.getFrontier();
         StringBuilder sb = new StringBuilder();
         for (int k = n; k >= 1; k--) {
-            sb.append(frontier <= -k ? "&9[B]" : "&8[ ]");
+            sb.append(frontier <= -k ? "&f[W]" : "&8[ ]");
         }
-        sb.append(frontier == 0 ? "&f[M]" : "&8[ ]");
+        sb.append(frontier == 0 ? "&7[M]" : "&8[ ]");
         for (int k = 1; k <= n; k++) {
-            sb.append(frontier >= k ? "&c[R]" : "&8[ ]");
+            sb.append(frontier >= k ? "&8[N]" : "&8[ ]");
         }
         return ChatColor.translateAlternateColorCodes('&', sb.toString());
     }
@@ -949,8 +950,8 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
 
     private Team parseTeam(String arg) {
         return switch (arg.toLowerCase(Locale.ROOT)) {
-            case "red", "rouge" -> Team.RED;
-            case "blue", "bleu" -> Team.BLUE;
+            case "black", "noir" -> Team.BLACK;
+            case "white", "blanc" -> Team.WHITE;
             default -> null;
         };
     }
@@ -970,9 +971,9 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, "&c/ss delete <nom> &7- Supprimer une arène");
             MessageUtil.send(sender, "&c/ss setlobby <nom> &7- Définir le point de lobby");
             MessageUtil.send(sender, "&c/ss setzonecount <nom> <5|7|9> &7- Définir le nombre de zones du vaisseau");
-            MessageUtil.send(sender, "&c/ss setspawn <nom> <red|blue> <mid|base1|base2|base3|base4> <index> &7- Définir/remplacer un spawn de zone");
-            MessageUtil.send(sender, "&c/ss delspawn <nom> <red|blue> <mid|base1|base2|base3|base4> <index> &7- Supprimer un spawn de zone");
-            MessageUtil.send(sender, "&c/ss setgoal <nom> <red|blue> <base1|base2|base3|base4> <pos1|pos2> &7- Définir le but d'une base");
+            MessageUtil.send(sender, "&c/ss setspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> &7- Définir/remplacer un spawn de zone");
+            MessageUtil.send(sender, "&c/ss delspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> &7- Supprimer un spawn de zone");
+            MessageUtil.send(sender, "&c/ss setgoal <nom> <black|white> <base1|base2|base3|base4> <pos1|pos2> &7- Définir le but d'une base");
             MessageUtil.send(sender, "&c/ss setgamezone <nom> <pos1|pos2> &7- Définir la zone de jeu (protection + restauration)");
             MessageUtil.send(sender, "&c/ss setmaxplayers <nom> <nombre> &7- Définir le nombre max de joueurs de l'arène (0 = global)");
             MessageUtil.send(sender, "&c/ss start <nom> &7- Forcer le démarrage");
@@ -1015,7 +1016,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 3 && (sub.equals("setspawn") || sub.equals("delspawn") || sub.equals("setgoal"))) {
-            return filterStartingWith(List.of("red", "blue"), args[2]);
+            return filterStartingWith(List.of("black", "white"), args[2]);
         }
 
         if (args.length == 3 && sub.equals("setgamezone")) {
