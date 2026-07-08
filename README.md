@@ -1,0 +1,154 @@
+# 🚀 SpaceShip Plugin
+
+![Paper 1.21.1](https://img.shields.io/badge/Paper-1.21.1-blue)
+![Java 21](https://img.shields.io/badge/Java-21-orange)
+![Maven](https://img.shields.io/badge/Maven-3.9.6-green)
+
+Plugin de minijeu SpaceShip pour Minecraft Paper - Un jeu multi-zones en ligne façon vaisseau spatial. Percez le vaisseau ennemi zone par zone jusqu'à son cœur pour gagner!
+
+---
+
+## 🎮 Description
+
+SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mode multi-zones en ligne. Deux équipes s'affrontent dans un vaisseau spatial avec plusieurs zones à capturer. L'objectif est de progresser zone par zone jusqu'à atteindre le cœur du vaisseau ennemi pour remporter la victoire!
+
+## ✨ Fonctionnalités
+
+### 🏟️ Système d'Arènes
+- Création et gestion de multiples arènes de jeu
+- Configuration flexible du nombre de zones par arène
+- Systèmes de points de spawn personnalisés
+- Zone de lobby configurable
+
+### ⚔️ Mode Équipe
+- Système d'équipes avec captures de zones
+- Progression linéaire à travers les zones
+- Protection des zones capturées
+- Objectif final: atteindre le cœur ennemi
+
+### 📊 Stats & Classements
+- Suivi détaillé des statistiques par joueur
+- Hologrammes de leaderboards en temps réel
+- Classements par kills, victoires, et plus
+- Catégories multiples de stats
+
+### 🖥️ Interface GUI
+- Menus interactifs pour la sélection d'arène
+- Interface de visualisation des stats
+- Sélection d'équipe intuitive
+
+### 🎯 Commandes Complètes
+- `/ss` - Commande principale avec de nombreuses sous-commandes
+- `/ssarenas` - Ouverture du GUI de sélection d'arène
+
+## 📋 Prérequis
+
+- **Serveur:** Paper ou Paper-based (Folia, Purpur, etc.)
+- **Version:** Minecraft 1.21.1
+- **Java:** JDK 21 ou supérieur
+- **Dépendances:** Aucune (100% autonome avec shading)
+
+## 📥 Installation
+
+1. Téléchargez la dernière version depuis la [page des releases](https://github.com/herocraftlol/SpaceShip-Plugin/releases)
+2. Placez le fichier `SpaceShip-X.X.X.jar` dans le dossier `plugins` de votre serveur
+3. Redémarrez le serveur
+4. Configurez les arènes avec les commandes détaillées ci-dessous
+
+## 🔧 Configuration
+
+### Permissions
+
+| Permission | Description | Défaut |
+|------------|-------------|--------|
+| `spaceship.admin` | Permission pour administrer le jeu (setup, hologrammes, reset) | Op |
+| `spaceship.play` | Permission pour jouer à SpaceShip | Tous les joueurs |
+
+### Commandes
+
+#### Commande Principale `/ss`
+
+| Sous-commande | Description |
+|---------------|-------------|
+| `create <nom>` | Créer une nouvelle arène |
+| `delete <nom>` | Supprimer une arène |
+| `list` | Lister toutes les arènes |
+| `arenas` | Ouvrir le GUI de sélection d'arène |
+| `setlobby <x> <y> <z>` | Définir le point de lobby |
+| `setzonecount <nombre>` | Définir le nombre de zones |
+| `setspawn <team> <zone>` | Définir un point de spawn |
+| `delspawn <team> <zone>` | Supprimer un spawn |
+| `setgoal <team> <zone>` | Définir la zone but (cœur) |
+| `setgamezone <zone>` | Définir la zone de jeu |
+| `start` | Démarrer la partie |
+| `stop` | Arrêter la partie |
+| `join <arène>` | Rejoindre une arène |
+| `joinrandom` | Rejoindre une arène aléatoire |
+| `leave` | Quitter la partie en cours |
+| `info` | Afficher les infos de l'arène |
+| `stats` | Voir ses statistiques |
+| `leaderboard` | Voir les leaderboards |
+
+#### Commande `/ssarenas`
+Ouvre le GUI interactif de sélection d'arène.
+
+## 🏗️ Architecture
+
+```
+com.spaceship.plugin/
+├── commands/          # Gestion des commandes
+├── game/             # Logique de jeu (Arena, GameManager, Teams...)
+├── gui/              # Interfaces graphiques
+├── hologram/        # Gestion des hologrammes de leaderboards
+├── listeners/        # Event listeners (dégâts, mouvements, connexion...)
+├── scoreboard/       # Gestion des scoreboards
+├── stats/            # Système de statistiques
+└── util/            # Utilitaires
+```
+
+## 🔨 Compilation
+
+Pour compiler le plugin depuis les sources:
+
+```bash
+# Installer JDK 21 et Maven si nécessaire
+# Clonez le dépôt
+git clone https://github.com/herocraftlol/SpaceShip-Plugin.git
+cd SpaceShip-Plugin/spaceship
+
+# Compilez avec Maven
+mvn clean package -DskipTests
+```
+
+Le JAR compilé sera dans `target/SpaceShip.jar`.
+
+## 📝 Structure des Zones
+
+```
+Vaisseau spatial (exemple avec 5 zones):
+
+Équipe A                           Équipe B
+┌─────────────────────────┐  ┌─────────────────────────┐
+│  Zone 5 (Cœur A)         │  │         Zone 1 (Cœur B) │
+│  [BUT Équipe A]          │  │         [BUT Équipe B]  │
+├─────────────────────────┤  ├─────────────────────────┤
+│  Zone 4                  │  │         Zone 2          │
+├─────────────────────────┤  ├─────────────────────────┤
+│  Zone 3 (Neutre)        │  │         Zone 3 (Neutre) │
+└─────────────────────────┘  └─────────────────────────┘
+
+Les équipes progressent de leur cœur vers le centre,
+puis vers le cœur ennemi.
+```
+
+## 📜 Licence
+
+Ce projet est privé et appartient à son auteur.
+
+## 👤 Auteur
+
+**herocraftlol** - [GitHub](https://github.com/herocraftlol)
+
+---
+
+⭐ N'hésitez pas à ouvrir des issues pour rapporter des bugs ou suggérer des fonctionnalités!
