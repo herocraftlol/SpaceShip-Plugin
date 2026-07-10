@@ -50,7 +50,9 @@ messages:
   game-start: "&a&lLA PARTIE COMMENCE ! Percez le vaisseau ennemi jusqu'à son cœur !"
   # %team% a percé une zone de plus (%depth%/%total% zones adverses percées)
   point-scored: "&6%team% &epercent une zone du vaisseau adverse ! &7(%depth%/%total%)"
-  # %team% a repoussé l'adversaire jusqu'au centre du vaisseau
+  # %team% a repoussé l'adversaire jusqu'au centre du vaisseau (recul jusqu'à Base1 inclus)
   point-reset: "&6%team% &erepousse l'adversaire jusqu'au centre du vaisseau !"
+  # %team% a repoussé l'adversaire d'une zone (l'adversaire recule mais reste en territoire adverse)
+  point-pushback: "&6%team% &erepousse l'adversaire d'une zone ! &7(recule à %depth%/%total%)"
   game-end: "&a&lL'équipe %team% a atteint le cœur du vaisseau ennemi et a gagné la partie !"
   not-enough-players: "&cPas assez de joueurs pour démarrer."

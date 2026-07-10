@@ -39,8 +39,11 @@ import java.util.Collections;
  *   loin dans le territoire adverse : la frontière avance d'un cran vers cette équipe. Si
  *   cela correspond à la dernière Base du vaisseau adverse, c'est la victoire immédiate.
  * - Si l'équipe qui marque était en train de DÉFENDRE (l'adversaire avait l'avantage) et
- *   reprend sa zone : la frontière revient intégralement à 0 (retour au centre du vaisseau),
- *   quelle que soit la profondeur à laquelle l'adversaire s'était avancé.
+ *   reprend sa zone : la frontière recule d'UN SEUL cran (l'adversaire est repoussé d'une
+ *   Base, pas éliminé d'un coup). Si l'adversaire n'était avancé que d'une zone (Base1),
+ *   ce recul d'un cran ramène naturellement tout le monde à 0 (Mid) ; s'il était plus
+ *   profond, il reste avec son avantage réduit d'une zone (ex : Base2 -> Base1) au lieu
+ *   d'être renvoyé jusqu'au centre.
  *
  * Plusieurs instances de GameManager peuvent coexister (une par arène), gérées par
  * ArenaManager, ce qui permet plusieurs parties SpaceShip simultanées et indépendantes.
@@ -529,7 +532,7 @@ public class GameManager {
             Team zoneOwner = Team.values()[target[0]];
             int baseIndex = target[1];
 
-            if (arena.isInBaseGoal(zoneOwner, baseIndex, player.getLocation())) {
+            if (arena.isInZoneGoal(zoneOwner, baseIndex, player.getLocation())) {
                 handleZoneCapture(playerTeam);
                 break; // Une seule percée à la fois
             }
@@ -537,16 +540,19 @@ public class GameManager {
     }
 
     /**
-     * Calcule la zone (propriétaire + index de base) que l'équipe donnée doit atteindre
-     * pour marquer, compte tenu de l'état actuel de la ligne de front. Renvoie null si,
-     * pour une raison quelconque, aucune cible n'est valide (ne devrait pas arriver en
-     * jeu normal tant que basesPerSide >= 1).
+     * Calcule la zone (propriétaire + index de base, 0 = Mid) que l'équipe donnée doit
+     * atteindre pour marquer, compte tenu de l'état actuel de la ligne de front.
+     * Renvoie null si, pour une raison quelconque, aucune cible n'est valide (ne devrait
+     * pas arriver en jeu normal tant que basesPerSide >= 1).
      *
-     * - Si l'équipe est à égalité ou déjà en avance : sa cible est la PROCHAINE base
-     *   adverse à percer (une de plus que sa profondeur actuelle).
+     * - Si personne n'a encore d'avantage (frontier == 0, tout le monde est au Mid) :
+     *   la cible est le but du Mid situé du côté adverse (percer Mid en premier, ce qui
+     *   envoie l'équipe qui perce dans la Base1 adverse).
+     * - Si l'équipe est déjà en avance : sa cible est la PROCHAINE base adverse à percer
+     *   (une de plus que sa profondeur actuelle).
      * - Si l'équipe est en train de défendre (l'adversaire a l'avantage) : sa cible est
      *   de RE-percer la zone que l'adversaire occupe actuellement, dans son propre
-     *   territoire, ce qui remet tout à zéro.
+     *   territoire (voir handleZoneCapture pour l'effet, qui recule d'un cran seulement).
      */
     private int[] getActiveTargetZone(Team team) {
         int n = getBasesPerSide();
@@ -556,6 +562,10 @@ public class GameManager {
             int nextDepth = signedAdvantage + 1;
             if (nextDepth > n) return null; // ne devrait pas arriver (la partie aurait dû se terminer avant)
             Team enemy = team.opponent();
+            if (signedAdvantage == 0) {
+                // Personne n'a encore percé : la cible est le but du Mid, côté adverse.
+                return new int[]{enemy.ordinal(), 0};
+            }
             return new int[]{enemy.ordinal(), nextDepth};
         } else {
             int depthToReclaim = -signedAdvantage;
@@ -616,12 +626,31 @@ public class GameManager {
 
             announceAdvanceTitle(scoringTeam, newDepth, n);
         } else {
-            frontier = 0;
+            // scoringTeam défend : l'adversaire occupait sa Base<depthToReclaim>.
+            // On ne renvoie PAS tout le monde au Mid d'un coup : l'adversaire est
+            // simplement repoussé d'UNE zone (comme s'il avait perdu une percée).
+            // S'il n'était qu'à Base1, ce recul d'un cran retombe naturellement à 0 (Mid).
+            int depthToReclaim = -signedAdvantage;
+            int newDepth = depthToReclaim - 1;
+            Team enemy = scoringTeam.opponent();
 
-            broadcast(plugin.getConfig().getString("messages.point-reset", "")
-                    .replace("%team%", scoringTeam.getColoredName()));
+            if (newDepth <= 0) {
+                frontier = 0;
 
-            announceResetTitle(scoringTeam);
+                broadcast(plugin.getConfig().getString("messages.point-reset", "")
+                        .replace("%team%", scoringTeam.getColoredName()));
+
+                announceResetTitle(scoringTeam);
+            } else {
+                frontier = (enemy == Team.BLACK) ? newDepth : -newDepth;
+
+                broadcast(plugin.getConfig().getString("messages.point-pushback", "")
+                        .replace("%team%", scoringTeam.getColoredName())
+                        .replace("%depth%", String.valueOf(newDepth))
+                        .replace("%total%", String.valueOf(n)));
+
+                announcePushbackTitle(scoringTeam, newDepth, n);
+            }
         }
 
         startRoundReset();
@@ -641,6 +670,17 @@ public class GameManager {
     private void announceResetTitle(Team scoringTeam) {
         String title = scoringTeam.getColoredName() + " \u00a7lREPOUSSE L'ENNEMI !";
         String subtitle = "\u00a77Retour au centre du vaisseau";
+        for (UUID uuid : playerTeams.keySet()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.sendTitle(title, subtitle, 5, 40, 10);
+            }
+        }
+    }
+
+    private void announcePushbackTitle(Team scoringTeam, int depth, int total) {
+        String title = scoringTeam.getColoredName() + " \u00a7lREPOUSSE L'ENNEMI !";
+        String subtitle = "\u00a77L'adversaire recule à Zone " + depth + " \u00a77/ " + total;
         for (UUID uuid : playerTeams.keySet()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {

@@ -17,8 +17,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -339,7 +339,7 @@ public class CategoryLeaderboardManager {
     }
 
     /**
-     * Applique une échelle précise à l'entité via l'attribut générique SCALE
+     * Applique une échelle précise à l'entité via l'attribut générique GENERIC_SCALE
      * (disponible depuis Minecraft 1.20.5+ / Paper 1.20.5+), ce qui permet une
      * taille continue (ex: 0.5, 1.75, 3.0) au lieu du simple "petit/grand" de
      * {@link ArmorStand#setSmall(boolean)}.

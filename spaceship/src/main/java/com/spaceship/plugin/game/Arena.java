@@ -28,8 +28,11 @@ import java.util.concurrent.ThreadLocalRandom;
  *   percé jusqu'à cette zone, voir GameManager)
  * - une zone de capture ("but") : l'endroit à atteindre pour percer cette zone.
  *
- * La zone Mid possède uniquement des positions de spawn (une liste par équipe, pas de
- * but : le centre du vaisseau est neutre, on n'y marque jamais directement).
+ * La zone Mid possède, comme les bases, un but par équipe (le "goal" situé du côté
+ * de cette équipe dans la salle centrale) : c'est ce que l'équipe adverse doit
+ * atteindre pour percer une première fois et être envoyée dans la Base1 correspondante.
+ * En plus de ce but, Mid a aussi des positions de spawn par équipe (le point de
+ * départ neutre en tout début de partie, ou après avoir été totalement repoussé).
  */
 public class Arena {
 
@@ -52,6 +55,11 @@ public class Arena {
 
     // Buts (zones de capture) des bases, par équipe puis par index de base (1..4).
     private final Map<Team, Map<Integer, CuboidRegion>> baseGoals = new EnumMap<>(Team.class);
+
+    // But (zone de capture) du Mid, par équipe (le "côté" de la salle centrale
+    // appartenant à cette équipe : l'adversaire doit l'atteindre pour percer une
+    // première fois et être envoyé en Base1).
+    private final Map<Team, CuboidRegion> midGoals = new EnumMap<>(Team.class);
 
     private int maxPlayers = -1;
 
@@ -130,6 +138,7 @@ public class Arena {
     public boolean isFullyConfigured() {
         if (lobbySpawn == null) return false;
         if (midSpawns.get(Team.BLACK).isEmpty() || midSpawns.get(Team.WHITE).isEmpty()) return false;
+        if (getMidGoal(Team.BLACK) == null || getMidGoal(Team.WHITE) == null) return false;
 
         int n = getBasesPerSide();
         for (Team team : Team.values()) {
@@ -212,6 +221,39 @@ public class Arena {
         return region != null && region.contains(loc);
     }
 
+    // ================= BUT (ZONE DE CAPTURE) : MID =================
+
+    public CuboidRegion getMidGoal(Team team) {
+        return midGoals.get(team);
+    }
+
+    public void setMidGoal(Team team, CuboidRegion region) {
+        midGoals.put(team, region);
+    }
+
+    public boolean isInMidGoal(Team team, Location loc) {
+        CuboidRegion region = getMidGoal(team);
+        return region != null && region.contains(loc);
+    }
+
+    // ================= BUTS : ACCESSEURS GÉNÉRIQUES (0 = Mid, 1..4 = Base<k>) =================
+
+    public CuboidRegion getZoneGoal(Team team, int baseIndex) {
+        return baseIndex == 0 ? getMidGoal(team) : getBaseGoal(team, baseIndex);
+    }
+
+    public void setZoneGoal(Team team, int baseIndex, CuboidRegion region) {
+        if (baseIndex == 0) {
+            setMidGoal(team, region);
+        } else {
+            setBaseGoal(team, baseIndex, region);
+        }
+    }
+
+    public boolean isInZoneGoal(Team team, int baseIndex, Location loc) {
+        return baseIndex == 0 ? isInMidGoal(team, loc) : isInBaseGoal(team, baseIndex, loc);
+    }
+
     // ================= ACCESSEURS GÉNÉRIQUES PAR ZONEROLE =================
 
     /**
@@ -264,6 +306,8 @@ public class Arena {
         config.set("arena.mid", null);
         saveSpawnList(config, "arena.mid.black", midSpawns.get(Team.BLACK));
         saveSpawnList(config, "arena.mid.white", midSpawns.get(Team.WHITE));
+        saveRegion(config, "arena.mid.black.goal", midGoals.get(Team.BLACK));
+        saveRegion(config, "arena.mid.white.goal", midGoals.get(Team.WHITE));
 
         config.set("arena.bases", null);
         for (Team team : Team.values()) {
@@ -299,6 +343,16 @@ public class Arena {
         midSpawns.get(Team.BLACK).addAll(loadSpawnList(config, "arena.mid.black"));
         midSpawns.get(Team.WHITE).clear();
         midSpawns.get(Team.WHITE).addAll(loadSpawnList(config, "arena.mid.white"));
+
+        midGoals.clear();
+        CuboidRegion blackMidGoal = loadRegion(config, "arena.mid.black.goal");
+        if (blackMidGoal != null) {
+            midGoals.put(Team.BLACK, blackMidGoal);
+        }
+        CuboidRegion whiteMidGoal = loadRegion(config, "arena.mid.white.goal");
+        if (whiteMidGoal != null) {
+            midGoals.put(Team.WHITE, whiteMidGoal);
+        }
 
         for (Team team : Team.values()) {
             baseSpawns.get(team).clear();
