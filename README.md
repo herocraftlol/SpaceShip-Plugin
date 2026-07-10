@@ -26,6 +26,11 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 - Protection des zones capturées
 - Objectif final: atteindre le cœur ennemi
 
+### 🎯 Système de Goals (Mid Goals)
+- **Buts séparés** : Mid Goal pour entrer, Base Goals pour pousser
+- **Pushback progressif** : Repousser l'ennemi le fait reculer d'une zone
+- Commandes : `/ss setgoal <map> <team> <mid|base1|base2> <pos1|pos2>`
+
 ### 📊 Stats & Classements
 - Suivi détaillé des statistiques par joueur
 - Hologrammes de leaderboards en temps réel
@@ -122,23 +127,29 @@ mvn clean package -DskipTests
 
 Le JAR compilé sera dans `target/SpaceShip.jar`.
 
-## 📝 Structure des Zones
+## 📝 Structure des Zones (avec Mid Goals)
 
 ```
 Vaisseau spatial (exemple avec 5 zones):
 
-Équipe NOIR                         Équipe BLANC
-┌─────────────────────────┐  ┌─────────────────────────┐
-│  Zone 5 (Cœur Noir)      │  │         Zone 1 (Cœur Blanc) │
-│  [BUT Équipe Noir]       │  │         [BUT Équipe Blanc] │
-├─────────────────────────┤  ├─────────────────────────┤
-│  Zone 4                  │  │         Zone 2          │
-├─────────────────────────┤  ├─────────────────────────┤
-│  Zone 3 (Neutre)        │  │         Zone 3 (Neutre) │
-└─────────────────────────┘  └─────────────────────────┘
+Équipe NOIR                            Équipe BLANC
+┌───────────────────────────────────────────────────────────────┐
+│                                                               │
+│  [Goal: Base2]   [Goal: Base1]   [MID]   [Goal: Base1]  [Goal: Base2]  │
+│                                                               │
+│     Base2 ← NOIR          NOIR → ← BLANC          BLANC →     │
+│    (spawn)            Entry  Exit  Exit  Entry    (spawn)      │
+│                                                               │
+│                                    NOIR doit atteindre:       │
+│                                    • Goal MID Blanc pour      │
+│                                      entrer en Base1 Blanc   │
+│                                    • Goal Base1 Blanc pour    │
+│                                      pousser vers MID        │
+└───────────────────────────────────────────────────────────────┘
 
-Les équipes progressent de leur cœur vers le centre,
-puis vers le cœur ennemi.
+Légende:
+• Goal MID (ex: white mid) = Zone d'ENTRY pour NOIR (entrer en Base1)
+• Goal Base1 (ex: white base1) = Zone d'EXIT pour BLANC (repousser au MID)
 ```
 
 ## 📜 Licence
