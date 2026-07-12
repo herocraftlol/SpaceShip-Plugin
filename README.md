@@ -29,7 +29,7 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 ### 🎯 Système de Goals (Mid Goals)
 - **Buts séparés** : Mid Goal pour entrer, Base Goals pour pousser
 - **Pushback progressif** : Repousser l'ennemi le fait reculer d'une zone
-- Commandes : `/ss setgoal <map> <team> <mid|base1|base2> <pos1|pos2>`
+- Commandes : `/ss setgoal <map> <zone+team> <pos1|pos2>` (ex: `midblack`, `base1white`)
 
 ### 📊 Stats & Classements
 - Suivi détaillé des statistiques par joueur
@@ -81,9 +81,9 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 | `arenas` | Ouvrir le GUI de sélection d'arène |
 | `setlobby <x> <y> <z>` | Définir le point de lobby |
 | `setzonecount <nombre>` | Définir le nombre de zones |
-| `setspawn <team> <zone>` | Définir un point de spawn |
-| `delspawn <team> <zone>` | Supprimer un spawn |
-| `setgoal <team> <zone>` | Définir la zone but (cœur) |
+| `setspawn <zone+team> <index>` | Définir un point de spawn (ex: `midblack`, `base1white`) |
+| `delspawn <zone+team> <index>` | Supprimer un spawn |
+| `setgoal <zone+team> <pos1|pos2>` | Définir la zone but (ex: `midblack`, `base1white`) |
 | `setgamezone <zone>` | Définir la zone de jeu |
 | `start` | Démarrer la partie |
 | `stop` | Arrêter la partie |
@@ -92,7 +92,13 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 | `leave` | Quitter la partie en cours |
 | `info` | Afficher les infos de l'arène |
 | `stats` | Voir ses statistiques |
-| `leaderboard` | Voir les leaderboards |
+
+#### Format zone+team
+
+Les commandes utilisent un format combiné **zone+équipe** :
+- `midblack` / `midwhite` - Mid de l'équipe Noir / Blanc
+- `base1black` / `base1white` - Base1 de l'équipe Noir / Blanc
+- `base2black` / `base2white` - Base2 de l'équipe Noir / Blanc
 
 #### Commande `/ssarenas`
 Ouvre le GUI interactif de sélection d'arène.
