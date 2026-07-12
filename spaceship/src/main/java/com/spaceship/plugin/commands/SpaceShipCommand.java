@@ -36,9 +36,9 @@ import java.util.*;
  *   /ss list                                                  - liste toutes les arènes
  *   /ss setlobby <nom>                                        - définit le lobby (à ta position)
  *   /ss setzonecount <nom> <5|7|9>                            - définit le nombre de zones du vaisseau
- *   /ss setspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> - définit/remplace un spawn de zone
- *   /ss delspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> - supprime un spawn de zone
- *   /ss setgoal <nom> <black|white> <mid|base1|base2|base3|base4> <pos1|pos2>  - définit le but (zone de capture) d'une zone
+ *   /ss setspawn <nom> <midblack|midwhite|base1black|base1white|...> <index> - définit/remplace un spawn
+ *   /ss delspawn <nom> <midblack|midwhite|base1black|base1white|...> <index> - supprime un spawn
+ *   /ss setgoal  <nom> <midblack|midwhite|base1black|base1white|...> <pos1|pos2> - définit le but d'une zone
  *   /ss setgamezone <nom> <pos1|pos2>                         - définit + capture la zone de jeu protégée
  *   /ss setmaxplayers <nom> <nombre>                          - définit le max de joueurs de l'arène (0 = global)
  *   /ss join <nom>                                            - rejoindre une arène
@@ -226,31 +226,83 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
-     * Parse le rôle de zone (mid/base1/base2/base3/base4) et vérifie qu'il est valide
-     * pour le nombre de bases par équipe actuellement configuré sur cette arène.
-     * Envoie un message d'erreur et renvoie null si invalide.
+     * Représente une zone identifiée par sa salle ET son équipe propriétaire,
+     * ex : "base1black" → (BLACK, BASE1), "midwhite" → (WHITE, MID).
      */
-    private ZoneRole parseZoneRoleOrError(CommandSender sender, GameManager gm, String arg) {
-        ZoneRole role = ZoneRole.parse(arg);
+    private record TeamZone(Team team, ZoneRole role) {
+        /** Ex : "Base1 Noir" */
+        String label() {
+            return role.getLabel() + " " + team.getColoredName();
+        }
+    }
+
+    /**
+     * Parse un token fusionné "salle+équipe" (ex: "midblack", "base1white", "base2black")
+     * et vérifie qu'il est valide pour le zoneCount de l'arène.
+     * Renvoie null et envoie un message d'erreur si invalide.
+     */
+    private TeamZone parseTeamZoneOrError(CommandSender sender, GameManager gm, String arg) {
+        if (arg == null) {
+            sendZoneKeyHelp(sender, gm);
+            return null;
+        }
+        String s = arg.toLowerCase(Locale.ROOT).trim();
+        Team team;
+        String roleStr;
+        if (s.endsWith("black")) {
+            team = Team.BLACK;
+            roleStr = s.substring(0, s.length() - "black".length());
+        } else if (s.endsWith("white")) {
+            team = Team.WHITE;
+            roleStr = s.substring(0, s.length() - "white".length());
+        } else {
+            sendZoneKeyHelp(sender, gm);
+            return null;
+        }
+        ZoneRole role = ZoneRole.parse(roleStr);
         if (role == null) {
-            MessageUtil.send(sender, "&cZone invalide. Utilise 'mid', 'base1', 'base2'"
-                    + (gm.getArena().getBasesPerSide() >= 3 ? ", 'base3'" : "")
-                    + (gm.getArena().getBasesPerSide() >= 4 ? " ou 'base4'" : " ou 'base2'") + ".");
+            sendZoneKeyHelp(sender, gm);
             return null;
         }
         if (!role.isMid() && role.getBaseIndex() > gm.getArena().getBasesPerSide()) {
             MessageUtil.send(sender, "&cCette arène n'a que &7" + gm.getArena().getBasesPerSide()
                     + " &cbase(s) par équipe (zoneCount=" + gm.getArena().getZoneCount()
-                    + "). Utilise /ss setzonecount pour en ajouter plus.");
+                    + "). Utilise &7/ss setzonecount &cpour en ajouter plus.");
             return null;
         }
-        return role;
+        return new TeamZone(team, role);
+    }
+
+    private void sendZoneKeyHelp(CommandSender sender, GameManager gm) {
+        int n = gm.getArena().getBasesPerSide();
+        StringBuilder sb = new StringBuilder("&cZone invalide. Exemples valides : &7midblack&c, &7midwhite");
+        for (int k = 1; k <= n; k++) {
+            sb.append("&c, &7base").append(k).append("black&c, &7base").append(k).append("white");
+        }
+        MessageUtil.send(sender, sb.toString());
+    }
+
+    /**
+     * Construit la liste des tokens "salle+équipe" valides pour une arène donnée.
+     * Utilisé pour l'auto-complétion.
+     */
+    private List<String> buildZoneKeyList(GameManager gm) {
+        List<String> list = new ArrayList<>();
+        list.add("midblack");
+        list.add("midwhite");
+        int n = gm.getArena().getBasesPerSide();
+        for (int k = 1; k <= n; k++) {
+            list.add("base" + k + "black");
+            list.add("base" + k + "white");
+        }
+        return list;
     }
 
     private void handleSetSpawn(CommandSender sender, String[] args) {
         if (!checkAdminAndPlayer(sender)) return;
-        if (args.length < 5) {
-            MessageUtil.send(sender, "&cUsage: /ss setspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index>");
+        // /ss setspawn <nom> <zone+equipe> <index>   ex: setspawn arena1 midblack 1
+        if (args.length < 4) {
+            MessageUtil.send(sender, "&cUsage: /ss setspawn <nom> <midblack|midwhite|base1black|base1white|...> <index>");
             MessageUtil.send(sender, "&7L'index commence à 1. Utilise le prochain index disponible pour ajouter un nouveau spawn.");
             return;
         }
@@ -258,25 +310,19 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
         if (gm == null) return;
         Player player = (Player) sender;
 
-        Team team = parseTeam(args[2]);
-        if (team == null) {
-            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'black' ou 'white'.");
-            return;
-        }
-
-        ZoneRole role = parseZoneRoleOrError(sender, gm, args[3]);
-        if (role == null) return;
+        TeamZone tz = parseTeamZoneOrError(sender, gm, args[2]);
+        if (tz == null) return;
 
         int index;
         try {
-            index = Integer.parseInt(args[4]);
+            index = Integer.parseInt(args[3]);
         } catch (NumberFormatException e) {
             MessageUtil.send(sender, "&cL'index doit être un nombre entier (ex: 1, 2, 3...).");
             return;
         }
 
-        int nextAvailable = gm.getArena().getZoneSpawnCount(team, role) + 1;
-        boolean ok = gm.getArena().setZoneSpawn(team, role, index, player.getLocation());
+        int nextAvailable = gm.getArena().getZoneSpawnCount(tz.team(), tz.role()) + 1;
+        boolean ok = gm.getArena().setZoneSpawn(tz.team(), tz.role(), index, player.getLocation());
         if (!ok) {
             MessageUtil.send(sender, "&cIndex invalide. Le prochain index disponible pour cette zone est &7" + nextAvailable + "&c.");
             return;
@@ -284,9 +330,9 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
         gm.saveArenaConfig();
 
         boolean wasReplaced = index <= (nextAvailable - 1);
-        MessageUtil.send(sender, "&aLe spawn &7#" + index + " &ade " + team.getColoredName() + " &a(" + role.getLabel()
-                + ") &asur '" + args[1] + "' a été " + (wasReplaced ? "remplacé" : "défini") + " à ta position. &7("
-                + gm.getArena().getZoneSpawnCount(team, role) + " spawn(s) au total pour cette zone)");
+        MessageUtil.send(sender, "&aSpawn &7#" + index + " &ade " + tz.label()
+                + " &asur '" + args[1] + "' " + (wasReplaced ? "remplacé" : "défini") + " à ta position. &7("
+                + gm.getArena().getZoneSpawnCount(tz.team(), tz.role()) + " spawn(s) au total)");
     }
 
     private void handleDelSpawn(CommandSender sender, String[] args) {
@@ -294,75 +340,70 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, "&cTu n'as pas la permission.");
             return;
         }
-        if (args.length < 5) {
-            MessageUtil.send(sender, "&cUsage: /ss delspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index>");
+        // /ss delspawn <nom> <zone+equipe> <index>
+        if (args.length < 4) {
+            MessageUtil.send(sender, "&cUsage: /ss delspawn <nom> <midblack|midwhite|base1black|base1white|...> <index>");
             return;
         }
         GameManager gm = resolveArena(sender, args, 1);
         if (gm == null) return;
 
-        Team team = parseTeam(args[2]);
-        if (team == null) {
-            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'black' ou 'white'.");
-            return;
-        }
-
-        ZoneRole role = parseZoneRoleOrError(sender, gm, args[3]);
-        if (role == null) return;
+        TeamZone tz = parseTeamZoneOrError(sender, gm, args[2]);
+        if (tz == null) return;
 
         int index;
         try {
-            index = Integer.parseInt(args[4]);
+            index = Integer.parseInt(args[3]);
         } catch (NumberFormatException e) {
             MessageUtil.send(sender, "&cL'index doit être un nombre entier (ex: 1, 2, 3...).");
             return;
         }
 
-        boolean ok = gm.getArena().removeZoneSpawn(team, role, index);
+        boolean ok = gm.getArena().removeZoneSpawn(tz.team(), tz.role(), index);
         if (!ok) {
             MessageUtil.send(sender, "&cIndex invalide. Cette zone a actuellement &7"
-                    + gm.getArena().getZoneSpawnCount(team, role) + " &cspawn(s).");
+                    + gm.getArena().getZoneSpawnCount(tz.team(), tz.role()) + " &cspawn(s).");
             return;
         }
         gm.saveArenaConfig();
-        MessageUtil.send(sender, "&aSpawn &7#" + index + " &ade " + team.getColoredName() + " &a(" + role.getLabel()
-                + ") &asupprimé sur '" + args[1] + "'.");
+        MessageUtil.send(sender, "&aSpawn &7#" + index + " &ade " + tz.label() + " &asupprimé sur '" + args[1] + "'.");
     }
 
     /**
-     * Définit le but (zone de capture) d'une zone d'équipe : Mid (le "côté" de cette
-     * équipe dans la salle centrale) ou une Base.
+     * Définit le but (zone de capture) d'une salle identifiée par un token "salle+équipe"
+     * (ex : "midblack", "base1white", "base2black").
+     *
+     * Syntaxe : /ss setgoal <nom> <zone+equipe> <pos1|pos2>
+     * Exemples :
+     *   /ss setgoal arena1 midblack pos1      ← coin 1 du but Mid côté Noir
+     *   /ss setgoal arena1 midblack pos2      ← coin 2 : enregistre la zone
+     *   /ss setgoal arena1 base1white pos1    ← coin 1 du but Base1 côté Blanc
      */
     private void handleSetGoal(CommandSender sender, String[] args) {
         if (!checkAdminAndPlayer(sender)) return;
-        if (args.length < 5) {
-            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <black|white> <mid|base1|base2|base3|base4> <pos1|pos2>");
+        if (args.length < 4) {
+            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <midblack|midwhite|base1black|base1white|...> <pos1|pos2>");
             return;
         }
         GameManager gm = resolveArena(sender, args, 1);
         if (gm == null) return;
         Player player = (Player) sender;
 
-        Team team = parseTeam(args[2]);
-        if (team == null) {
-            MessageUtil.send(sender, "&cÉquipe invalide. Utilise 'black' ou 'white'.");
-            return;
-        }
+        TeamZone tz = parseTeamZoneOrError(sender, gm, args[2]);
+        if (tz == null) return;
 
-        ZoneRole role = parseZoneRoleOrError(sender, gm, args[3]);
-        if (role == null) return;
-
-        String posArg = args[4].toLowerCase(Locale.ROOT);
-        String pendingKey = args[1].toLowerCase(Locale.ROOT) + ":" + team.name() + ":" + role.name();
+        String posArg = args[3].toLowerCase(Locale.ROOT);
+        // Clé unique pour le coin temporaire : "arène:TEAM:ROLE"
+        String pendingKey = args[1].toLowerCase(Locale.ROOT) + ":" + tz.team().name() + ":" + tz.role().name();
 
         if (posArg.equals("pos1")) {
             pendingGoalCorner1.put(pendingKey, player.getTargetBlock(null, 5).getLocation());
-            MessageUtil.send(sender, "&aCoin 1 du but &7" + team.getColoredName() + " " + role.getLabel()
-                    + "&a enregistré. Place-toi au coin opposé et fais &7/ss setgoal " + args[1] + " " + args[2] + " " + args[3] + " pos2");
+            MessageUtil.send(sender, "&aCoin 1 du but " + tz.label()
+                    + " &aenregistré. Va au coin opposé puis : &7/ss setgoal " + args[1] + " " + args[2] + " pos2");
         } else if (posArg.equals("pos2")) {
             Location corner1 = pendingGoalCorner1.get(pendingKey);
             if (corner1 == null) {
-                MessageUtil.send(sender, "&cTu dois d'abord définir le coin 1 avec /ss setgoal " + args[1] + " " + args[2] + " " + args[3] + " pos1");
+                MessageUtil.send(sender, "&cTu dois d'abord définir le coin 1 avec &7/ss setgoal " + args[1] + " " + args[2] + " pos1");
                 return;
             }
             Location corner2 = player.getTargetBlock(null, 5).getLocation();
@@ -370,15 +411,13 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
                 MessageUtil.send(sender, "&cLes deux coins doivent être dans le même monde !");
                 return;
             }
-
             CuboidRegion region = new CuboidRegion(corner1, corner2);
-            gm.getArena().setZoneGoal(team, role.getBaseIndex(), region);
+            gm.getArena().setZoneGoal(tz.team(), tz.role().getBaseIndex(), region);
             pendingGoalCorner1.remove(pendingKey);
             gm.saveArenaConfig();
-
-            MessageUtil.send(sender, "&aBut de " + team.getColoredName() + " " + role.getLabel() + " &asur '" + args[1] + "' défini avec succès !");
+            MessageUtil.send(sender, "&aBut " + tz.label() + " &asur '" + args[1] + "' défini !");
         } else {
-            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <black|white> <mid|base1|base2|base3|base4> <pos1|pos2>");
+            MessageUtil.send(sender, "&cUsage: /ss setgoal <nom> <midblack|midwhite|base1black|base1white|...> <pos1|pos2>");
         }
     }
 
@@ -574,21 +613,37 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
         int n = arena.getBasesPerSide();
         MessageUtil.send(sender, "&8&m----------&r &bSpaceShip: " + gm.getName() + " &8&m----------");
         MessageUtil.send(sender, "&7État : &f" + gm.getState());
-        MessageUtil.send(sender, "&7Joueurs en partie : &f" + gm.getPlayerCount() + "&7/&f" + gm.getMaxPlayers()
+        MessageUtil.send(sender, "&7Joueurs : &f" + gm.getPlayerCount() + "&7/&f" + gm.getMaxPlayers()
                 + (arena.getMaxPlayers() > 0 ? " &8(spécifique)" : " &8(global)"));
         MessageUtil.send(sender, "&7Map configurée : " + (arena.isFullyConfigured() ? "&aOui" : "&cNon"));
-        MessageUtil.send(sender, "&7Nombre de zones : &f" + arena.getZoneCount() + " &7(" + n + " base(s) par équipe)");
-        MessageUtil.send(sender, "&7Spawns Mid : &8" + arena.getMidSpawnCount(Team.BLACK) + " noir(s) &7/ &f" + arena.getMidSpawnCount(Team.WHITE) + " blanc(s)");
-        MessageUtil.send(sender, "&7But Mid : &8noir=" + (arena.getMidGoal(Team.BLACK) != null ? "&aOK" : "&cmanquant")
-                + " &7/ &fblanc=" + (arena.getMidGoal(Team.WHITE) != null ? "&aOK" : "&cmanquant"));
-        for (int k = 1; k <= n; k++) {
-            MessageUtil.send(sender, "&7Base" + k + " : &8noir spawns=" + arena.getBaseSpawnCount(Team.BLACK, k)
-                    + " but=" + (arena.getBaseGoal(Team.BLACK, k) != null ? "&aOK" : "&cmanquant")
-                    + " &7/ &fblanc spawns=" + arena.getBaseSpawnCount(Team.WHITE, k)
-                    + " but=" + (arena.getBaseGoal(Team.WHITE, k) != null ? "&aOK" : "&cmanquant"));
+        MessageUtil.send(sender, "&7Zones : &f" + arena.getZoneCount() + " &7(" + n + " base(s)/équipe)");
+
+        // ── Mid ──────────────────────────────────────────────────────────────
+        MessageUtil.send(sender, "&7&lMid");
+        for (Team t : Team.values()) {
+            String key = "mid" + t.name().toLowerCase(Locale.ROOT);
+            boolean hasSpawn = arena.getMidSpawnCount(t) > 0;
+            boolean hasGoal  = arena.getMidGoal(t) != null;
+            MessageUtil.send(sender, "  &8" + key
+                    + "  spawn=" + (hasSpawn ? "&a" + arena.getMidSpawnCount(t) : "&c✗")
+                    + "  &8but=" + (hasGoal ? "&aOK" : "&c✗"));
         }
-        MessageUtil.send(sender, "&7Zone de jeu (protection) : " + (gm.getArenaSnapshot().isCaptured() ? "&aOui" : "&cNon configurée"));
-        MessageUtil.send(sender, "&7Ligne de front : " + buildFrontierBar(gm));
+
+        // ── Bases ─────────────────────────────────────────────────────────────
+        for (int k = 1; k <= n; k++) {
+            MessageUtil.send(sender, "&7&lBase" + k);
+            for (Team t : Team.values()) {
+                String key = "base" + k + t.name().toLowerCase(Locale.ROOT);
+                boolean hasSpawn = arena.getBaseSpawnCount(t, k) > 0;
+                boolean hasGoal  = arena.getBaseGoal(t, k) != null;
+                MessageUtil.send(sender, "  &8" + key
+                        + "  spawn=" + (hasSpawn ? "&a" + arena.getBaseSpawnCount(t, k) : "&c✗")
+                        + "  &8but=" + (hasGoal ? "&aOK" : "&c✗"));
+            }
+        }
+
+        MessageUtil.send(sender, "&7Zone de jeu : " + (gm.getArenaSnapshot().isCaptured() ? "&aOui" : "&cNon configurée"));
+        MessageUtil.send(sender, "&7Front : " + buildFrontierBar(gm));
     }
 
     /**
@@ -969,9 +1024,9 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, "&c/ss delete <nom> &7- Supprimer une arène");
             MessageUtil.send(sender, "&c/ss setlobby <nom> &7- Définir le point de lobby");
             MessageUtil.send(sender, "&c/ss setzonecount <nom> <5|7|9> &7- Définir le nombre de zones du vaisseau");
-            MessageUtil.send(sender, "&c/ss setspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> &7- Définir/remplacer un spawn de zone");
-            MessageUtil.send(sender, "&c/ss delspawn <nom> <black|white> <mid|base1|base2|base3|base4> <index> &7- Supprimer un spawn de zone");
-            MessageUtil.send(sender, "&c/ss setgoal <nom> <black|white> <mid|base1|base2|base3|base4> <pos1|pos2> &7- Définir le but d'une zone");
+            MessageUtil.send(sender, "&c/ss setspawn <nom> <midblack|midwhite|base1black|base1white|...> <index> &7- Définir/remplacer un spawn");
+            MessageUtil.send(sender, "&c/ss delspawn <nom> <midblack|midwhite|base1black|base1white|...> <index> &7- Supprimer un spawn");
+            MessageUtil.send(sender, "&c/ss setgoal <nom> <midblack|midwhite|base1black|base1white|...> <pos1|pos2> &7- Définir le but d'une zone");
             MessageUtil.send(sender, "&c/ss setgamezone <nom> <pos1|pos2> &7- Définir la zone de jeu (protection + restauration)");
             MessageUtil.send(sender, "&c/ss setmaxplayers <nom> <nombre> &7- Définir le nombre max de joueurs de l'arène (0 = global)");
             MessageUtil.send(sender, "&c/ss start <nom> &7- Forcer le démarrage");
@@ -1013,28 +1068,30 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             return filterStartingWith(List.of("5", "7", "9"), args[2]);
         }
 
-        if (args.length == 3 && (sub.equals("setspawn") || sub.equals("delspawn") || sub.equals("setgoal"))) {
-            return filterStartingWith(List.of("black", "white"), args[2]);
-        }
-
         if (args.length == 3 && sub.equals("setgamezone")) {
             return filterStartingWith(List.of("pos1", "pos2"), args[2]);
         }
 
+        // setspawn / delspawn : /ss <sub> <nom> <zone+equipe> <index>
+        if (args.length == 3 && (sub.equals("setspawn") || sub.equals("delspawn"))) {
+            GameManager gm2 = plugin.getArenaManager().get(args[1]);
+            List<String> zones = gm2 != null ? buildZoneKeyList(gm2)
+                    : List.of("midblack", "midwhite", "base1black", "base1white", "base2black", "base2white");
+            return filterStartingWith(zones, args[2]);
+        }
         if (args.length == 4 && (sub.equals("setspawn") || sub.equals("delspawn"))) {
-            return filterStartingWith(List.of("mid", "base1", "base2", "base3", "base4"), args[3]);
+            return filterStartingWith(List.of("1", "2", "3", "4"), args[3]);
         }
 
+        // setgoal : /ss setgoal <nom> <zone+equipe> <pos1|pos2>
+        if (args.length == 3 && sub.equals("setgoal")) {
+            GameManager gm2 = plugin.getArenaManager().get(args[1]);
+            List<String> zones = gm2 != null ? buildZoneKeyList(gm2)
+                    : List.of("midblack", "midwhite", "base1black", "base1white", "base2black", "base2white");
+            return filterStartingWith(zones, args[2]);
+        }
         if (args.length == 4 && sub.equals("setgoal")) {
-            return filterStartingWith(List.of("mid", "base1", "base2", "base3", "base4"), args[3]);
-        }
-
-        if (args.length == 5 && sub.equals("setgoal")) {
-            return filterStartingWith(List.of("pos1", "pos2"), args[4]);
-        }
-
-        if (args.length == 5 && (sub.equals("setspawn") || sub.equals("delspawn"))) {
-            return filterStartingWith(List.of("1", "2", "3", "4"), args[4]);
+            return filterStartingWith(List.of("pos1", "pos2"), args[3]);
         }
 
         if (args.length == 2 && sub.equals("top")) {
