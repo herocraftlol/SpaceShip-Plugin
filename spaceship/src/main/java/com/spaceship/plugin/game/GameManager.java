@@ -502,44 +502,31 @@ public class GameManager {
     }
 
     /**
-     * Vérifie chaque tick si un joueur se trouve dans le goal ADVERSE (peu importe la salle).
+     * Vérifie chaque tick si un joueur se trouve dans le goal ADVERSE de la SALLE COURANTE.
      * <p>
-     * Règle : un joueur NOIR marque en touchant un goal WHITE dans n'importe quelle salle,
-     * et un joueur BLANC marque en touchant un goal BLACK dans n'importe quelle salle.
-     * Dès qu'un but est marqué, tout le monde est téléporté dans la salle de départ
-     * correspondante (base1white si noir a marqué, base1black si blanc a marqué).
+     * Seule la salle déterminée par {@code frontier} est active : on ne peut marquer que
+     * dans le goal adverse de cette salle-là. Cela évite qu'un joueur entrant dans une salle
+     * plus profonde déclenche une victoire prématurée.
+     * <p>
+     * Salle courante : frontier=0 → "mid" | frontier=+k → "base{k}white" | frontier=-k → "base{k}black"
      */
     public void checkCaptureZone() {
         if (state != GameState.PLAYING) return;
+
+        String currentRoom = Arena.frontierToRoom(frontier);
 
         for (UUID playerId : playerTeams.keySet()) {
             Player player = Bukkit.getPlayer(playerId);
             if (player == null || !player.isOnline()) continue;
 
             Team playerTeam = playerTeams.get(playerId);
-            // Un joueur marque en touchant le goal de l'équipe ADVERSE (dans n'importe quelle salle)
+            // Un joueur marque en touchant le goal adverse dans la salle courante uniquement
             Team targetGoalTeam = playerTeam.opponent();
-            if (isInAnyGoalOf(targetGoalTeam, player.getLocation())) {
+            if (arena.isInRoomGoal(currentRoom, targetGoalTeam, player.getLocation())) {
                 handleZoneCapture(playerTeam);
                 break;
             }
         }
-    }
-
-    /**
-     * True si {@code loc} se trouve dans le goal de {@code goalTeam} dans n'importe quelle salle
-     * configurée (mid, base1black, base1white, base2black, base2white, ...).
-     */
-    private boolean isInAnyGoalOf(Team goalTeam, Location loc) {
-        int n = arena.getBasesPerSide();
-        // Vérifier le mid
-        if (arena.isInRoomGoal("mid", goalTeam, loc)) return true;
-        // Vérifier toutes les salles de base
-        for (int k = 1; k <= n; k++) {
-            if (arena.isInRoomGoal("base" + k + "black", goalTeam, loc)) return true;
-            if (arena.isInRoomGoal("base" + k + "white", goalTeam, loc)) return true;
-        }
-        return false;
     }
 
     private BukkitTask captureSchedulerTask;
