@@ -69,6 +69,16 @@ public class GameManager {
     // Position actuelle de la "ligne de front" le long du vaisseau (voir doc de classe).
     private int frontier = 0;
 
+    /**
+     * Vrai quand une équipe a touché le goal de Base1 adverse et que tout le monde a été
+     * téléporté dans la salle Base2 adverse, en attente d'un score final ou d'un recul.
+     * Le frontier ne change PAS encore — il ne change qu'au moment du score en Base2.
+     * L'équipe qui attaque est celle dont le signe du frontier va dans sa direction d'avance.
+     */
+    private boolean inTransitToBase2 = false;
+    /** Équipe qui est en phase de transit vers la Base2 adverse (null si inTransitToBase2 == false). */
+    private Team transitAttackingTeam = null;
+
     private BukkitTask countdownTask;
     private BukkitTask roundResetTask;
     private BukkitTask offhandReplenishTask;
@@ -137,6 +147,8 @@ public class GameManager {
 
     private void resetFrontier() {
         frontier = 0;
+        inTransitToBase2 = false;
+        transitAttackingTeam = null;
     }
 
     /**
@@ -502,30 +514,153 @@ public class GameManager {
     }
 
     /**
-     * Vérifie chaque tick si un joueur se trouve dans le goal ADVERSE de la SALLE COURANTE.
+     * Vérifie chaque tick si un joueur se trouve dans le goal actif.
      * <p>
-     * Seule la salle déterminée par {@code frontier} est active : on ne peut marquer que
-     * dans le goal adverse de cette salle-là. Cela évite qu'un joueur entrant dans une salle
-     * plus profonde déclenche une victoire prématurée.
-     * <p>
-     * Salle courante : frontier=0 → "mid" | frontier=+k → "base{k}white" | frontier=-k → "base{k}black"
+     * Deux phases possibles :
+     * <ul>
+     *   <li><b>Phase normale</b> ({@code inTransitToBase2 == false}) : le goal actif est celui
+     *       de la salle courante ({@code frontier}). Si c'est une salle Base1 adverse et que
+     *       l'équipe attaquante touche le goal, on entre en transit vers Base2 (sans scorer).</li>
+     *   <li><b>Phase transit</b> ({@code inTransitToBase2 == true}) : les joueurs sont en Base2
+     *       adverse. L'équipe attaquante peut scorer (→ victoire), l'adversaire peut aussi scorer
+     *       (→ recul en Base1, fin du transit).</li>
+     * </ul>
      */
     public void checkCaptureZone() {
         if (state != GameState.PLAYING) return;
 
-        String currentRoom = Arena.frontierToRoom(frontier);
+        int n = getBasesPerSide();
 
-        for (UUID playerId : playerTeams.keySet()) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player == null || !player.isOnline()) continue;
+        if (inTransitToBase2) {
+            // ── Phase transit : on est physiquement dans la salle Base2 adverse ──
+            // La salle Base2 adverse par rapport à transitAttackingTeam
+            String base2Room = getBase2RoomFor(transitAttackingTeam);
 
-            Team playerTeam = playerTeams.get(playerId);
-            // Un joueur marque en touchant le goal adverse dans la salle courante uniquement
-            Team targetGoalTeam = playerTeam.opponent();
-            if (arena.isInRoomGoal(currentRoom, targetGoalTeam, player.getLocation())) {
-                handleZoneCapture(playerTeam);
-                break;
+            for (UUID playerId : playerTeams.keySet()) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player == null || !player.isOnline()) continue;
+
+                Team playerTeam = playerTeams.get(playerId);
+                Team targetGoalTeam = playerTeam.opponent();
+
+                if (arena.isInRoomGoal(base2Room, targetGoalTeam, player.getLocation())) {
+                    handleBase2Capture(playerTeam);
+                    break;
+                }
             }
+        } else {
+            // ── Phase normale : salle courante selon frontier ──
+            String currentRoom = Arena.frontierToRoom(frontier);
+
+            for (UUID playerId : playerTeams.keySet()) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player == null || !player.isOnline()) continue;
+
+                Team playerTeam = playerTeams.get(playerId);
+                Team targetGoalTeam = playerTeam.opponent();
+
+                if (arena.isInRoomGoal(currentRoom, targetGoalTeam, player.getLocation())) {
+                    // Vérifie si c'est un goal de Base1 adverse (avant-dernière salle)
+                    int currentDepth = Math.abs(frontier); // 0=mid, 1=base1, 2=base2...
+                    boolean isBase1 = (currentDepth == n - 1);
+
+                    if (isBase1) {
+                        // L'équipe attaquante est celle qui vient de toucher le goal adverse
+                        // mais seulement si elle est bien l'équipe qui avance (ou neutre)
+                        boolean attackerIsScoring =
+                                (playerTeam == Team.BLACK && frontier >= 0) ||
+                                (playerTeam == Team.WHITE && frontier <= 0);
+
+                        if (attackerIsScoring) {
+                            // Transit vers Base2 sans changer le frontier
+                            handleTransitToBase2(playerTeam);
+                        } else {
+                            // L'adversaire repousse depuis Base1 → comportement normal
+                            handleZoneCapture(playerTeam);
+                        }
+                    } else {
+                        handleZoneCapture(playerTeam);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Retourne l'identifiant de la salle Base2 adverse pour {@code attackingTeam}.
+     * Noir attaque en territoire Blanc → "base2white" ; Blanc attaque → "base2black".
+     */
+    private String getBase2RoomFor(Team attackingTeam) {
+        int n = getBasesPerSide();
+        if (attackingTeam == Team.BLACK) {
+            return "base" + n + "white";
+        } else {
+            return "base" + n + "black";
+        }
+    }
+
+    /**
+     * Déclenché quand {@code attackingTeam} touche le goal de Base1 adverse alors qu'elle avance.
+     * On téléporte tout le monde dans la salle Base2 adverse sans changer le frontier.
+     * La phase de transit commence.
+     */
+    private void handleTransitToBase2(Team attackingTeam) {
+        inTransitToBase2 = true;
+        transitAttackingTeam = attackingTeam;
+
+        String base2Room = getBase2RoomFor(attackingTeam);
+        String base2Label = (attackingTeam == Team.BLACK) ? "Base2 Blanc" : "Base2 Noir";
+
+        String title = attackingTeam.getColoredName() + " \u00a7lPERCÉE !";
+        String subtitle = "\u00a77Assaut final : " + base2Label;
+        for (UUID uuid : playerTeams.keySet()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.sendTitle(title, subtitle, 5, 40, 10);
+            }
+        }
+
+        startRoundResetToRoom(base2Room);
+    }
+
+    /**
+     * Déclenché quand un joueur touche un goal en phase de transit (Base2 adverse).
+     * <ul>
+     *   <li>L'équipe attaquante marque → victoire immédiate.</li>
+     *   <li>L'adversaire marque → fin du transit, retour en Base1 (frontier inchangé).</li>
+     * </ul>
+     */
+    private void handleBase2Capture(Team scoringTeam) {
+        if (scoringTeam == transitAttackingTeam) {
+            // L'attaquant marque en Base2 → victoire
+            // On pousse le frontier pour déclencher endGame proprement
+            if (scoringTeam == Team.BLACK) {
+                frontier++;
+            } else {
+                frontier--;
+            }
+            endGame(scoringTeam);
+        } else {
+            // L'adversaire repousse depuis Base2 → retour en Base1
+            inTransitToBase2 = false;
+            Team attacker = transitAttackingTeam;
+            transitAttackingTeam = null;
+
+            // La salle courante redevient la Base1 (frontier inchangé)
+            String base1Room = Arena.frontierToRoom(frontier);
+            String base1Label = (attacker == Team.BLACK) ? "Base1 Blanc" : "Base1 Noir";
+
+            String title = scoringTeam.getColoredName() + " \u00a7lREPOUSSÉ !";
+            String subtitle = "\u00a77Retour en " + base1Label;
+            for (UUID uuid : playerTeams.keySet()) {
+                Player player = Bukkit.getPlayer(uuid);
+                if (player != null) {
+                    player.sendTitle(title, subtitle, 5, 40, 10);
+                }
+            }
+
+            startRoundResetToRoom(base1Room);
         }
     }
 
@@ -658,6 +793,63 @@ public class GameManager {
 
             roundResetSecondsLeft--;
         }, 0L, 20L);
+    }
+
+    /**
+     * Identique à {@link #startRoundReset()} mais téléporte tout le monde dans {@code targetRoom}
+     * au lieu de la salle déduite du frontier. Utilisé pour le transit Base1→Base2 et le retour
+     * Base2→Base1 sans changer le frontier.
+     */
+    private void startRoundResetToRoom(String targetRoom) {
+        state = GameState.ROUND_RESET;
+        arenaSnapshot.restore();
+        teleportAllToRoom(targetRoom);
+
+        freezeAllPlayers();
+
+        roundResetSecondsLeft = plugin.getConfig().getInt("round-reset-countdown", 5);
+
+        roundResetTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (roundResetSecondsLeft <= 0) {
+                if (roundResetTask != null) {
+                    roundResetTask.cancel();
+                    roundResetTask = null;
+                }
+                unfreezeAllPlayers();
+                state = GameState.PLAYING;
+                broadcast("&a&lÀ vous de jouer !");
+                playSoundToAll(Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.5f, 1.2f);
+                return;
+            }
+
+            broadcast("&eProchain round dans &6" + roundResetSecondsLeft + "&e...");
+
+            if (roundResetSecondsLeft <= 3) {
+                float pitch = roundResetSecondsLeft == 1 ? 1.4f : 0.9f;
+                playSoundToAll(Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, pitch);
+            } else {
+                playSoundToAll(Sound.BLOCK_NOTE_BLOCK_HAT, 0.5f, 0.8f);
+            }
+
+            roundResetSecondsLeft--;
+        }, 0L, 20L);
+    }
+
+    /** Téléporte tous les joueurs dans la salle {@code roomId} avec restauration HP/kit. */
+    private void teleportAllToRoom(String roomId) {
+        for (UUID uuid : playerTeams.keySet()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player == null) continue;
+            Team team = playerTeams.get(uuid);
+            Location spawn = arena.getRoomSpawn(roomId, team);
+            if (spawn != null) {
+                player.teleport(spawn);
+            }
+            player.setGameMode(GameMode.SURVIVAL);
+            player.setHealth(20);
+            player.setFoodLevel(20);
+            KitManager.regiveGoldenApple(player);
+        }
     }
 
     private void checkForfeit() {

@@ -25,11 +25,11 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 - Progression linéaire à travers les zones
 - Protection des zones capturées
 
-### 🏆 Mode Domination
-- **Capturez les zones adverses** : Touchez un goal ennemi dans la salle courante pour marquer
-- **Salle courante basée sur la frontier** : frontier=0 → Mid, frontier=+k → base{k}white, frontier=-k → base{k}black
-- **Progression par zone** : Avancez zone par zone vers la base ennemie
-- **Téléportation automatique** : Quand un but est marqué, tous les joueurs sont téléportés
+### 🏆 Mode Domination v1.3.0
+- **Système Base1 → Base2** : Capturez Base1 adverse pour entrer en transit vers Base2
+- **Phase de transit** : Les joueurs sont téléportés en Base2 adverse, le frontier ne change pas encore
+- **Score en Base2** : Marquer en Base2 adverse = victoire
+- **Recul défensif** : L'adversaire peut marquer en Base2 pour revenir en Base1
 
 ### 📊 Stats & Classements
 - Suivi détaillé des statistiques par joueur
