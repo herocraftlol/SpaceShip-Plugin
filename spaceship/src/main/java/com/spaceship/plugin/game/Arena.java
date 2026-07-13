@@ -151,39 +151,6 @@ public class Arena {
         return r != null && r.contains(loc);
     }
 
-    // ================= CONVENIENCE METHODS FOR BLOCK PLACE LISTENER =================
-
-    /** Check if location is in base goal for team at base index k (1-based). */
-    public boolean isInBaseGoal(Team team, int k, Location loc) {
-        if (k < 1 || k > getBasesPerSide()) return false;
-        String roomId = "base" + k + team.name().toLowerCase(Locale.ROOT);
-        return isInRoomGoal(roomId, team, loc);
-    }
-
-    /** Get all mid spawns for team. */
-    public List<Location> getMidSpawns(Team team) {
-        List<Location> result = new ArrayList<>();
-        Map<Team, List<Location>> mid = roomSpawns.get("mid");
-        if (mid != null) {
-            List<Location> spawns = mid.get(team);
-            if (spawns != null) result.addAll(spawns);
-        }
-        return result;
-    }
-
-    /** Get all spawns for team at base index k (1-based). */
-    public List<Location> getBaseSpawns(Team team, int k) {
-        List<Location> result = new ArrayList<>();
-        if (k < 1 || k > getBasesPerSide()) return result;
-        String roomId = "base" + k + team.name().toLowerCase(Locale.ROOT);
-        Map<Team, List<Location>> base = roomSpawns.get(roomId);
-        if (base != null) {
-            List<Location> spawns = base.get(team);
-            if (spawns != null) result.addAll(spawns);
-        }
-        return result;
-    }
-
     // ================= VALIDATION =================
 
     /**

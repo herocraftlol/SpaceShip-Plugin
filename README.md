@@ -4,13 +4,13 @@
 ![Java 21](https://img.shields.io/badge/Java-21-orange)
 ![Maven](https://img.shields.io/badge/Maven-3.9.6-green)
 
-Plugin de minijeu SpaceShip pour Minecraft Paper - Un jeu multi-zones **Noir vs Blanc** en ligne façon vaisseau spatial. Percez le vaisseau ennemi zone par zone jusqu'à son cœur pour gagner!
+Plugin de minijeu SpaceShip pour Minecraft Paper - Un jeu multi-zones **Noir vs Blanc** en ligne façon vaisseau spatial avec mode **Domination**! Capturez les zones adverses pour marquer et dominez le vaisseau ennemi!
 
 ---
 
 ## 🎮 Description
 
-SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mode multi-zones en ligne. Deux équipes (**Noir vs Blanc**) s'affrontent dans un vaisseau spatial avec plusieurs zones à capturer. L'objectif est de progresser zone par zone jusqu'à atteindre le cœur du vaisseau ennemi pour remporter la victoire!
+SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mode multi-zones en ligne. Deux équipes (**Noir vs Blanc**) s'affrontent dans un vaisseau spatial avec plusieurs zones à capturer en mode **Domination**!
 
 ## ✨ Fonctionnalités
 
@@ -24,12 +24,12 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 - Système d'équipes **Noir vs Blanc** avec captures de zones
 - Progression linéaire à travers les zones
 - Protection des zones capturées
-- Objectif final: atteindre le cœur ennemi
 
-### 🎯 Système de Goals (Mid Goals)
-- **Buts séparés** : Mid Goal pour entrer, Base Goals pour pousser
-- **Pushback progressif** : Repousser l'ennemi le fait reculer d'une zone
-- Commandes : `/ss setgoal <map> <roomId> <black|white> <pos1|pos2>` (ex: `mid`, `base1black`, `base1white`)
+### 🏆 Mode Domination
+- **Capturez les zones adverses** : Touchez un goal ennemi dans n'importe quelle salle pour marquer
+- **Système simplifié** : Chaque équipe a ses propres goals dans chaque salle
+- **Téléportation automatique** : Quand un but est marqué, tous les joueurs sont téléportés
+- **Salle de départ** : Chaque équipe commence dans sa base (base1)
 
 ### 📊 Stats & Classements
 - Suivi détaillé des statistiques par joueur

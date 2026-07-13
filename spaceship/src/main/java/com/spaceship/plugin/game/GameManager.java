@@ -502,12 +502,12 @@ public class GameManager {
     }
 
     /**
-     * Vérifie chaque tick si un joueur se trouve dans le goal actif de son équipe.
+     * Vérifie chaque tick si un joueur se trouve dans le goal ADVERSE (peu importe la salle).
      * <p>
-     * Chaque salle (mid comme salle de base) a un goal distinct par équipe : un
-     * joueur ne peut déclencher que le goal de SA propre équipe dans la salle
-     * actuellement en jeu. L'effet (avancée ou repoussée) dépend ensuite de la
-     * situation (voir {@link #handleZoneCapture(Team)}).
+     * Règle : un joueur NOIR marque en touchant un goal WHITE dans n'importe quelle salle,
+     * et un joueur BLANC marque en touchant un goal BLACK dans n'importe quelle salle.
+     * Dès qu'un but est marqué, tout le monde est téléporté dans la salle de départ
+     * correspondante (base1white si noir a marqué, base1black si blanc a marqué).
      */
     public void checkCaptureZone() {
         if (state != GameState.PLAYING) return;
@@ -517,7 +517,9 @@ public class GameManager {
             if (player == null || !player.isOnline()) continue;
 
             Team playerTeam = playerTeams.get(playerId);
-            if (isInActiveGoal(playerTeam, player.getLocation())) {
+            // Un joueur marque en touchant le goal de l'équipe ADVERSE (dans n'importe quelle salle)
+            Team targetGoalTeam = playerTeam.opponent();
+            if (isInAnyGoalOf(targetGoalTeam, player.getLocation())) {
                 handleZoneCapture(playerTeam);
                 break;
             }
@@ -525,12 +527,19 @@ public class GameManager {
     }
 
     /**
-     * True si {@code loc} se trouve dans le goal de {@code team} pour la salle
-     * actuellement en jeu (déterminée par {@code frontier}).
+     * True si {@code loc} se trouve dans le goal de {@code goalTeam} dans n'importe quelle salle
+     * configurée (mid, base1black, base1white, base2black, base2white, ...).
      */
-    private boolean isInActiveGoal(Team team, Location loc) {
-        String roomId = Arena.frontierToRoom(frontier);
-        return arena.isInRoomGoal(roomId, team, loc);
+    private boolean isInAnyGoalOf(Team goalTeam, Location loc) {
+        int n = arena.getBasesPerSide();
+        // Vérifier le mid
+        if (arena.isInRoomGoal("mid", goalTeam, loc)) return true;
+        // Vérifier toutes les salles de base
+        for (int k = 1; k <= n; k++) {
+            if (arena.isInRoomGoal("base" + k + "black", goalTeam, loc)) return true;
+            if (arena.isInRoomGoal("base" + k + "white", goalTeam, loc)) return true;
+        }
+        return false;
     }
 
     private BukkitTask captureSchedulerTask;
@@ -560,109 +569,79 @@ public class GameManager {
     }
 
     /**
-     * Applique l'effet d'une percée réussie par scoringTeam, annonce le résultat, et
-     * soit fait gagner la partie (percée de la dernière Base adverse), soit lance le
-     * compte à rebours du round suivant avec la nouvelle position de ligne de front.
+     * Gère un but marqué par scoringTeam (un joueur a touché le goal adverse).
+     * <p>
+     * Logique de domination (5 salles, N=2 bases par équipe) :
+     * <pre>
+     *   Base2_Noir | Base1_Noir | Mid | Base1_Blanc | Base2_Blanc
+     *   frontier :    -2           -1     0             +1           +2
+     * </pre>
+     * - Si NOIR marque et frontier >= 0 (neutre ou avantage Noir) → frontier++
+     *   → Si frontier atteint +basesPerSide : VICTOIRE de Noir
+     * - Si NOIR marque et frontier < 0 (Blanc était en avance) → frontier++ (recul d'un cran)
+     *   → Blanc perd une zone, on peut revenir au Mid si frontier revient à 0
+     * - Symétrique pour BLANC (frontier--)
+     * <p>
+     * La map est restaurée (snapshot) et tout le monde est téléporté dans
+     * la salle correspondant au nouveau frontier.
      */
     private void handleZoneCapture(Team scoringTeam) {
         int n = getBasesPerSide();
-        int signedAdvantage = (scoringTeam == Team.BLACK) ? frontier : -frontier;
 
-        if (signedAdvantage >= 0) {
-            int newDepth = signedAdvantage + 1;
-            if (newDepth >= n) {
-                // Percée de la dernière salle du vaisseau adverse : victoire immédiate.
-                announceFinalBreachTitle(scoringTeam);
-                endGame(scoringTeam);
-                return;
-            }
-
-            frontier = (scoringTeam == Team.BLACK) ? newDepth : -newDepth;
-
-            broadcast(plugin.getConfig().getString("messages.point-scored", "")
-                    .replace("%team%", scoringTeam.getColoredName())
-                    .replace("%depth%", String.valueOf(newDepth))
-                    .replace("%total%", String.valueOf(n)));
-
-            announceAdvanceTitle(scoringTeam, newDepth, n);
+        if (scoringTeam == Team.BLACK) {
+            frontier++;
         } else {
-            // scoringTeam défend : l'adversaire occupait sa Base<depthToReclaim>.
-            // On ne renvoie PAS tout le monde au Mid d'un coup : l'adversaire est
-            // simplement repoussé d'UNE zone (comme s'il avait perdu une percée).
-            // S'il n'était qu'à Base1, ce recul d'un cran retombe naturellement à 0 (Mid).
-            int depthToReclaim = -signedAdvantage;
-            int newDepth = depthToReclaim - 1;
-            Team enemy = scoringTeam.opponent();
-
-            if (newDepth <= 0) {
-                frontier = 0;
-
-                broadcast(plugin.getConfig().getString("messages.point-reset", "")
-                        .replace("%team%", scoringTeam.getColoredName()));
-
-                announceResetTitle(scoringTeam);
-            } else {
-                frontier = (enemy == Team.BLACK) ? newDepth : -newDepth;
-
-                broadcast(plugin.getConfig().getString("messages.point-pushback", "")
-                        .replace("%team%", scoringTeam.getColoredName())
-                        .replace("%depth%", String.valueOf(newDepth))
-                        .replace("%total%", String.valueOf(n)));
-
-                announcePushbackTitle(scoringTeam, newDepth, n);
-            }
+            frontier--;
         }
 
+        // Vérification victoire
+        if (frontier >= n) {
+            // NOIR a percé toutes les bases blanches
+            endGame(Team.BLACK);
+            return;
+        }
+        if (frontier <= -n) {
+            // BLANC a percé toutes les bases noires
+            endGame(Team.WHITE);
+            return;
+        }
+
+        // Annonce du but et de la nouvelle salle
+        int depth = Math.abs(frontier); // 0 = Mid, 1 = Base1, 2 = Base2...
+        String roomLabel;
+        if (frontier == 0) {
+            roomLabel = "Mid";
+        } else if (frontier > 0) {
+            roomLabel = "Base" + frontier + " Blanc";
+        } else {
+            roomLabel = "Base" + (-frontier) + " Noir";
+        }
+
+        broadcast(plugin.getConfig().getString("messages.point-scored", "")
+                .replace("%team%", scoringTeam.getColoredName())
+                .replace("%depth%", String.valueOf(depth))
+                .replace("%total%", String.valueOf(n)));
+
+        announceGoalTitle(scoringTeam, roomLabel);
         startRoundReset();
     }
 
-    private void announceAdvanceTitle(Team scoringTeam, int depth, int total) {
-        String title = scoringTeam.getColoredName() + " \u00a7lPERCÉE !";
-        String subtitle = "\u00a7fZone " + depth + " \u00a77/ " + total;
+    private void announceGoalTitle(Team scoringTeam, String roomLabel) {
+        String title = scoringTeam.getColoredName() + " \u00a7lBUT !";
+        String subtitle = "\u00a77Repositionnement : " + roomLabel;
         for (UUID uuid : playerTeams.keySet()) {
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
                 player.sendTitle(title, subtitle, 5, 40, 10);
-            }
-        }
-    }
-
-    private void announceResetTitle(Team scoringTeam) {
-        String title = scoringTeam.getColoredName() + " \u00a7lREPOUSSE L'ENNEMI !";
-        String subtitle = "\u00a77Retour au centre du vaisseau";
-        for (UUID uuid : playerTeams.keySet()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                player.sendTitle(title, subtitle, 5, 40, 10);
-            }
-        }
-    }
-
-    private void announcePushbackTitle(Team scoringTeam, int depth, int total) {
-        String title = scoringTeam.getColoredName() + " \u00a7lREPOUSSE L'ENNEMI !";
-        String subtitle = "\u00a77L'adversaire recule à Zone " + depth + " \u00a77/ " + total;
-        for (UUID uuid : playerTeams.keySet()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                player.sendTitle(title, subtitle, 5, 40, 10);
-            }
-        }
-    }
-
-    private void announceFinalBreachTitle(Team scoringTeam) {
-        String title = scoringTeam.getColoredName() + " \u00a7lATTEINT LE CŒUR DU VAISSEAU !";
-        for (UUID uuid : playerTeams.keySet()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                player.sendTitle(title, "", 5, 40, 10);
             }
         }
     }
 
     private void startRoundReset() {
         state = GameState.ROUND_RESET;
-        teleportAllForRoundReset();
+        // Restaurer la map (clear les blocs posés) AVANT de téléporter les joueurs
         arenaSnapshot.restore();
+        teleportAllForRoundReset();
 
         freezeAllPlayers();
 
