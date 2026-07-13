@@ -473,6 +473,12 @@ public class GameManager {
      * </pre>
      */
     public Location getCurrentSpawnFor(Team team) {
+        if (inTransitToBase2) {
+            // En phase de transit, les joueurs sont physiquement en Base2 adverse
+            String base2Room = getBase2RoomFor(transitAttackingTeam);
+            Location loc = arena.getRoomSpawn(base2Room, team);
+            if (loc != null) return loc;
+        }
         return resolveSpawnForRound(team);
     }
 
