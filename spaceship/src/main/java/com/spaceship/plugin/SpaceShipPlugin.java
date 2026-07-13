@@ -7,7 +7,6 @@ import com.spaceship.plugin.gui.ArenaGUI;
 import com.spaceship.plugin.gui.ArenaGUIListener;
 import com.spaceship.plugin.hologram.CategoryLeaderboardManager;
 import com.spaceship.plugin.listeners.ArenaProtectionListener;
-import com.spaceship.plugin.listeners.BlockPlaceListener;
 import com.spaceship.plugin.listeners.ForceStartItemListener;
 import com.spaceship.plugin.listeners.LeaveItemListener;
 import com.spaceship.plugin.listeners.PlayerConnectionListener;
@@ -67,7 +66,6 @@ public class SpaceShipPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ForceStartItemListener(this), this);
         getServer().getPluginManager().registerEvents(new LeaveItemListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerItemListener(this), this);
-        getServer().getPluginManager().registerEvents(new BlockPlaceListener(this), this);
         getServer().getPluginManager().registerEvents(new ArenaGUIListener(this, arenaGUI), this);
 
         getLogger().info("SpaceShip activé ! (" + arenaManager.getNames().size() + " arène(s) chargée(s))");

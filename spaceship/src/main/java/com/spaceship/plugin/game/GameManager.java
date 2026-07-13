@@ -450,35 +450,23 @@ public class GameManager {
     }
 
     /**
-     * Détermine le spawn à utiliser pour une équipe donnée, en fonction de la position
-     * actuelle de la ligne de front :
-     * - frontier == 0 : tout le monde spawn au Mid.
-     * - frontier > 0 (avantage NOIR) : NOIR spawn en avant, sur Base<frontier>_Blanc
-     *   (sa base d'attaque la plus profonde) ; BLANC, repoussé, repart du Mid.
-     * - frontier < 0 (avantage BLANC) : symétrique.
+     * Renvoie le spawn à utiliser pour {@code team} au début d'un round.
+     * <p>
+     * Tout le monde se téléporte dans la MÊME salle (déterminée par {@code frontier}).
+     * Dans cette salle, chaque équipe a ses propres points de spawn.
+     * <pre>
+     *   frontier =  0  →  salle "mid"
+     *   frontier = +k  →  salle "base{k}white"  (noir avance en territoire blanc)
+     *   frontier = -k  →  salle "base{k}black"  (blanc avance en territoire noir)
+     * </pre>
      */
     public Location getCurrentSpawnFor(Team team) {
         return resolveSpawnForRound(team);
     }
 
     private Location resolveSpawnForRound(Team team) {
-        if (frontier == 0) {
-            return arena.getMidSpawn(team);
-        }
-        if (frontier > 0) {
-            if (team == Team.BLACK) {
-                return arena.getBaseSpawn(Team.WHITE, frontier);
-            } else {
-                return arena.getMidSpawn(Team.WHITE);
-            }
-        } else {
-            int k = -frontier;
-            if (team == Team.WHITE) {
-                return arena.getBaseSpawn(Team.BLACK, k);
-            } else {
-                return arena.getMidSpawn(Team.BLACK);
-            }
-        }
+        String roomId = Arena.frontierToRoom(frontier);
+        return arena.getRoomSpawn(roomId, team);
     }
 
     private void teleportAllToSpawns() {
@@ -514,9 +502,12 @@ public class GameManager {
     }
 
     /**
-     * Vérifie, pour chaque joueur en partie, s'il se trouve dans le but "actif" qui le
-     * concerne (voir getActiveTargetZone) — c'est-à-dire la seule zone dont la capture
-     * a un effet en ce moment, compte tenu de la position actuelle de la ligne de front.
+     * Vérifie chaque tick si un joueur se trouve dans le goal actif de son équipe.
+     * <p>
+     * Chaque salle (mid comme salle de base) a un goal distinct par équipe : un
+     * joueur ne peut déclencher que le goal de SA propre équipe dans la salle
+     * actuellement en jeu. L'effet (avancée ou repoussée) dépend ensuite de la
+     * situation (voir {@link #handleZoneCapture(Team)}).
      */
     public void checkCaptureZone() {
         if (state != GameState.PLAYING) return;
@@ -526,51 +517,20 @@ public class GameManager {
             if (player == null || !player.isOnline()) continue;
 
             Team playerTeam = playerTeams.get(playerId);
-            int[] target = getActiveTargetZone(playerTeam); // {ownerTeamOrdinal, baseIndex}
-            if (target == null) continue;
-
-            Team zoneOwner = Team.values()[target[0]];
-            int baseIndex = target[1];
-
-            if (arena.isInZoneGoal(zoneOwner, baseIndex, player.getLocation())) {
+            if (isInActiveGoal(playerTeam, player.getLocation())) {
                 handleZoneCapture(playerTeam);
-                break; // Une seule percée à la fois
+                break;
             }
         }
     }
 
     /**
-     * Calcule la zone (propriétaire + index de base, 0 = Mid) que l'équipe donnée doit
-     * atteindre pour marquer, compte tenu de l'état actuel de la ligne de front.
-     * Renvoie null si, pour une raison quelconque, aucune cible n'est valide (ne devrait
-     * pas arriver en jeu normal tant que basesPerSide >= 1).
-     *
-     * - Si personne n'a encore d'avantage (frontier == 0, tout le monde est au Mid) :
-     *   la cible est le but du Mid situé du côté adverse (percer Mid en premier, ce qui
-     *   envoie l'équipe qui perce dans la Base1 adverse).
-     * - Si l'équipe est déjà en avance : sa cible est la PROCHAINE base adverse à percer
-     *   (une de plus que sa profondeur actuelle).
-     * - Si l'équipe est en train de défendre (l'adversaire a l'avantage) : sa cible est
-     *   de RE-percer la zone que l'adversaire occupe actuellement, dans son propre
-     *   territoire (voir handleZoneCapture pour l'effet, qui recule d'un cran seulement).
+     * True si {@code loc} se trouve dans le goal de {@code team} pour la salle
+     * actuellement en jeu (déterminée par {@code frontier}).
      */
-    private int[] getActiveTargetZone(Team team) {
-        int n = getBasesPerSide();
-        int signedAdvantage = (team == Team.BLACK) ? frontier : -frontier;
-
-        if (signedAdvantage >= 0) {
-            int nextDepth = signedAdvantage + 1;
-            if (nextDepth > n) return null; // ne devrait pas arriver (la partie aurait dû se terminer avant)
-            Team enemy = team.opponent();
-            if (signedAdvantage == 0) {
-                // Personne n'a encore percé : la cible est le but du Mid, côté adverse.
-                return new int[]{enemy.ordinal(), 0};
-            }
-            return new int[]{enemy.ordinal(), nextDepth};
-        } else {
-            int depthToReclaim = -signedAdvantage;
-            return new int[]{team.ordinal(), depthToReclaim};
-        }
+    private boolean isInActiveGoal(Team team, Location loc) {
+        String roomId = Arena.frontierToRoom(frontier);
+        return arena.isInRoomGoal(roomId, team, loc);
     }
 
     private BukkitTask captureSchedulerTask;

@@ -29,7 +29,7 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 ### 🎯 Système de Goals (Mid Goals)
 - **Buts séparés** : Mid Goal pour entrer, Base Goals pour pousser
 - **Pushback progressif** : Repousser l'ennemi le fait reculer d'une zone
-- Commandes : `/ss setgoal <map> <zone+team> <pos1|pos2>` (ex: `midblack`, `base1white`)
+- Commandes : `/ss setgoal <map> <roomId> <black|white> <pos1|pos2>` (ex: `mid`, `base1black`, `base1white`)
 
 ### 📊 Stats & Classements
 - Suivi détaillé des statistiques par joueur
@@ -81,9 +81,9 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 | `arenas` | Ouvrir le GUI de sélection d'arène |
 | `setlobby <x> <y> <z>` | Définir le point de lobby |
 | `setzonecount <nombre>` | Définir le nombre de zones |
-| `setspawn <zone+team> <index>` | Définir un point de spawn (ex: `midblack`, `base1white`) |
-| `delspawn <zone+team> <index>` | Supprimer un spawn |
-| `setgoal <zone+team> <pos1|pos2>` | Définir la zone but (ex: `midblack`, `base1white`) |
+| `setspawn <roomId> <black|white> <index>` | Définir un point de spawn (ex: `mid black 1`) |
+| `delspawn <roomId> <black|white> <index>` | Supprimer un spawn |
+| `setgoal <roomId> <black|white> <pos1|pos2>` | Définir la zone but (ex: `mid black pos1`) |
 | `setgamezone <zone>` | Définir la zone de jeu |
 | `start` | Démarrer la partie |
 | `stop` | Arrêter la partie |
@@ -93,12 +93,19 @@ SpaceShip est un plugin de minijeu compétitif inspiré de HikaBrain mais en mod
 | `info` | Afficher les infos de l'arène |
 | `stats` | Voir ses statistiques |
 
-#### Format zone+team
+#### Format RoomId
 
-Les commandes utilisent un format combiné **zone+équipe** :
-- `midblack` / `midwhite` - Mid de l'équipe Noir / Blanc
+Les commandes utilisent un **roomId** pour identifier la salle :
+- `mid` - Le Mid (neutre)
 - `base1black` / `base1white` - Base1 de l'équipe Noir / Blanc
 - `base2black` / `base2white` - Base2 de l'équipe Noir / Blanc
+
+Exemples :
+```bash
+/ss setspawn arena1 mid black 1     # Spawn Noir au Mid
+/ss setspawn arena1 base1white 1     # Spawn Blanc en Base1
+/ss setgoal arena1 base1black black pos1  # Goal Noir en Base1
+```
 
 #### Commande `/ssarenas`
 Ouvre le GUI interactif de sélection d'arène.

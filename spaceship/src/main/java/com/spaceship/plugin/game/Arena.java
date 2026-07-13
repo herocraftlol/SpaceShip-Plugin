@@ -2,292 +2,305 @@ package com.spaceship.plugin.game;
 
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Stocke tous les points importants de la map SpaceShip configurés par un admin.
+ * Stocke toute la configuration spatiale d'une arène SpaceShip.
  *
- * Contrairement à HikaBrain (une seule zone de capture par équipe), SpaceShip a
- * plusieurs zones alignées le long d'un "vaisseau" : une zone Mid neutre au centre,
- * puis Base1, Base2 (et Base3/Base4 selon la taille choisie) de chaque côté, de plus
- * en plus profondes dans le territoire de chaque équipe.
+ * LAYOUT (exemple zoneCount=5, 2 bases par équipe) :
  *
- * Exemple à 5 zones (zoneCount=5, donc 2 bases par équipe) :
- *   Base2_Noir | Base1_Noir | Mid | Base1_Blanc | Base2_Blanc
+ *   [base2black] [base1black] [mid] [base1white] [base2white]
  *
- * Chaque zone Base<k> d'une équipe possède :
- * - une ou plusieurs positions de spawn (utilisées par l'équipe ADVERSE quand elle a
- *   percé jusqu'à cette zone, voir GameManager)
- * - une zone de capture ("but") : l'endroit à atteindre pour percer cette zone.
+ * Chaque SALLE est une pièce fermée distincte.  Elle possède :
+ *   - un spawn par équipe (où chaque équipe apparaît quand tout le monde
+ *     est téléporté dans cette salle).
+ *   - un GOAL PAR ÉQUIPE (deux zones de capture distinctes dans la même salle) :
+ *     chaque équipe a son propre point à toucher pour marquer depuis cette salle.
+ *     Toucher SON goal fait avancer la ligne de front si on est déjà en tête (ou à
+ *     égalité au Mid), ou repousse l'adversaire d'une salle si on est en train de
+ *     défendre (voir GameManager#handleZoneCapture).
  *
- * La zone Mid possède, comme les bases, un but par équipe (le "goal" situé du côté
- * de cette équipe dans la salle centrale) : c'est ce que l'équipe adverse doit
- * atteindre pour percer une première fois et être envoyée dans la Base1 correspondante.
- * En plus de ce but, Mid a aussi des positions de spawn par équipe (le point de
- * départ neutre en tout début de partie, ou après avoir été totalement repoussé).
+ * Identifiants de salles (roomId) : "mid", "base1black", "base1white", "base2black", ...
+ * Chaque salle a donc deux goals, un par Team (BLACK/WHITE).
+ *
+ * Relation frontier → salle (voir GameManager) :
+ *   frontier =  0  →  "mid"
+ *   frontier = +k  →  "base{k}white"   (noir avance en territoire blanc)
+ *   frontier = -k  →  "base{k}black"   (blanc avance en territoire noir)
  */
 public class Arena {
 
     private Location lobbySpawn;
-
     private CuboidRegion gameZone;
-
-    /**
-     * Nombre total de zones du vaisseau : 5, 7 ou 9. Détermine le nombre de bases par
-     * équipe (basesPerSide = (zoneCount - 1) / 2).
-     */
     private int zoneCount = 5;
-
-    // Spawns du centre neutre, par équipe (utilisés au tout début de la partie, et
-    // par l'équipe qui défend tant qu'elle n'a pas été percée).
-    private final Map<Team, List<Location>> midSpawns = new EnumMap<>(Team.class);
-
-    // Spawns des bases, par équipe puis par index de base (1..4).
-    private final Map<Team, Map<Integer, List<Location>>> baseSpawns = new EnumMap<>(Team.class);
-
-    // Buts (zones de capture) des bases, par équipe puis par index de base (1..4).
-    private final Map<Team, Map<Integer, CuboidRegion>> baseGoals = new EnumMap<>(Team.class);
-
-    // But (zone de capture) du Mid, par équipe (le "côté" de la salle centrale
-    // appartenant à cette équipe : l'adversaire doit l'atteindre pour percer une
-    // première fois et être envoyé en Base1).
-    private final Map<Team, CuboidRegion> midGoals = new EnumMap<>(Team.class);
-
     private int maxPlayers = -1;
 
-    public Arena() {
-        midSpawns.put(Team.BLACK, new ArrayList<>());
-        midSpawns.put(Team.WHITE, new ArrayList<>());
-        baseSpawns.put(Team.BLACK, new HashMap<>());
-        baseSpawns.put(Team.WHITE, new HashMap<>());
-        baseGoals.put(Team.BLACK, new HashMap<>());
-        baseGoals.put(Team.WHITE, new HashMap<>());
-    }
-
-    // ================= ZONE COUNT / N =================
-
-    public int getZoneCount() {
-        return zoneCount;
-    }
+    /**
+     * Spawns par salle, puis par équipe.
+     * clé : roomId ("mid", "base1black", "base1white", ...)
+     */
+    private final Map<String, Map<Team, List<Location>>> roomSpawns = new LinkedHashMap<>();
 
     /**
-     * Définit le nombre total de zones du vaisseau. N'accepte que 5, 7 ou 9.
-     * Renvoie false si la valeur est invalide.
+     * Zones de capture (goals), par salle puis par équipe.
+     * clé : roomId ("mid", "base1black", "base1white", ...)
+     * Chaque salle contient un goal pour BLACK et un goal pour WHITE.
      */
+    private final Map<String, Map<Team, CuboidRegion>> roomGoals = new LinkedHashMap<>();
+
+    // ================= FRONTIER → ROOM =================
+
+    /**
+     * Convertit la valeur de la ligne de front en identifiant de salle :
+     *   0  → "mid"
+     *  +k  → "base{k}white"
+     *  -k  → "base{k}black"
+     */
+    public static String frontierToRoom(int frontier) {
+        if (frontier == 0) return "mid";
+        if (frontier > 0) return "base" + frontier + "white";
+        return "base" + (-frontier) + "black";
+    }
+
+    // ================= ZONE COUNT =================
+
+    public int getZoneCount() { return zoneCount; }
+
+    /** N'accepte que 5, 7 ou 9. Renvoie false si invalide. */
     public boolean setZoneCount(int zoneCount) {
-        if (zoneCount != 5 && zoneCount != 7 && zoneCount != 9) {
-            return false;
-        }
+        if (zoneCount != 5 && zoneCount != 7 && zoneCount != 9) return false;
         this.zoneCount = zoneCount;
         return true;
     }
 
-    /**
-     * Nombre de bases par équipe (2, 3 ou 4 selon zoneCount = 5, 7 ou 9).
-     */
-    public int getBasesPerSide() {
-        return (zoneCount - 1) / 2;
-    }
+    /** Nombre de salles de base par équipe : 2, 3 ou 4 selon zoneCount 5/7/9. */
+    public int getBasesPerSide() { return (zoneCount - 1) / 2; }
 
     // ================= DIVERS =================
 
-    public int getMaxPlayers() {
-        return maxPlayers;
+    public int getMaxPlayers() { return maxPlayers; }
+    public void setMaxPlayers(int v) { this.maxPlayers = v <= 0 ? -1 : v; }
+    public CuboidRegion getGameZone() { return gameZone; }
+    public void setGameZone(CuboidRegion region) { this.gameZone = region; }
+    public boolean isInGameZone(Location loc) { return gameZone != null && gameZone.contains(loc); }
+    public Location getLobbySpawn() { return lobbySpawn; }
+    public void setLobbySpawn(Location loc) { this.lobbySpawn = loc; }
+
+    // ================= SPAWNS =================
+
+    private List<Location> spawnList(String roomId, Team team) {
+        return roomSpawns
+            .computeIfAbsent(roomId, k -> {
+                Map<Team, List<Location>> m = new EnumMap<>(Team.class);
+                m.put(Team.BLACK, new ArrayList<>());
+                m.put(Team.WHITE, new ArrayList<>());
+                return m;
+            })
+            .computeIfAbsent(team, k -> new ArrayList<>());
     }
 
-    public void setMaxPlayers(int maxPlayers) {
-        this.maxPlayers = maxPlayers <= 0 ? -1 : maxPlayers;
+    /** Renvoie un spawn aléatoire pour la salle et l'équipe données. Null si non configuré. */
+    public Location getRoomSpawn(String roomId, Team team) {
+        Map<Team, List<Location>> room = roomSpawns.get(roomId);
+        if (room == null) return null;
+        List<Location> list = room.get(team);
+        if (list == null || list.isEmpty()) return null;
+        return list.size() == 1 ? list.get(0)
+                                : list.get(ThreadLocalRandom.current().nextInt(list.size()));
     }
 
-    public CuboidRegion getGameZone() {
-        return gameZone;
+    public int getRoomSpawnCount(String roomId, Team team) {
+        Map<Team, List<Location>> room = roomSpawns.get(roomId);
+        if (room == null) return 0;
+        List<Location> list = room.get(team);
+        return list == null ? 0 : list.size();
     }
 
-    public void setGameZone(CuboidRegion gameZone) {
-        this.gameZone = gameZone;
+    /** Définit (ou remplace) le spawn numéro {@code index} (1-based). */
+    public boolean setRoomSpawn(String roomId, Team team, int index, Location loc) {
+        return setInList(spawnList(roomId, team), index, loc);
     }
 
-    public boolean isInGameZone(Location loc) {
-        return gameZone != null && gameZone.contains(loc);
+    public boolean removeRoomSpawn(String roomId, Team team, int index) {
+        Map<Team, List<Location>> room = roomSpawns.get(roomId);
+        if (room == null) return false;
+        List<Location> list = room.get(team);
+        return list != null && removeFromList(list, index);
     }
 
-    public Location getLobbySpawn() {
-        return lobbySpawn;
+    // ================= GOALS =================
+
+    /** Renvoie le goal de {@code team} dans la salle {@code roomId}, ou null si non configuré. */
+    public CuboidRegion getRoomGoal(String roomId, Team team) {
+        Map<Team, CuboidRegion> room = roomGoals.get(roomId);
+        return room == null ? null : room.get(team);
     }
 
-    public void setLobbySpawn(Location lobbySpawn) {
-        this.lobbySpawn = lobbySpawn;
+    /** Définit (ou remplace) le goal de {@code team} dans la salle {@code roomId}. */
+    public void setRoomGoal(String roomId, Team team, CuboidRegion region) {
+        roomGoals.computeIfAbsent(roomId, k -> new EnumMap<>(Team.class)).put(team, region);
     }
+
+    /** True si {@code loc} se trouve dans le goal de {@code team} pour la salle {@code roomId}. */
+    public boolean isInRoomGoal(String roomId, Team team, Location loc) {
+        CuboidRegion r = getRoomGoal(roomId, team);
+        return r != null && r.contains(loc);
+    }
+
+    // ================= CONVENIENCE METHODS FOR BLOCK PLACE LISTENER =================
+
+    /** Check if location is in base goal for team at base index k (1-based). */
+    public boolean isInBaseGoal(Team team, int k, Location loc) {
+        if (k < 1 || k > getBasesPerSide()) return false;
+        String roomId = "base" + k + team.name().toLowerCase(Locale.ROOT);
+        return isInRoomGoal(roomId, team, loc);
+    }
+
+    /** Get all mid spawns for team. */
+    public List<Location> getMidSpawns(Team team) {
+        List<Location> result = new ArrayList<>();
+        Map<Team, List<Location>> mid = roomSpawns.get("mid");
+        if (mid != null) {
+            List<Location> spawns = mid.get(team);
+            if (spawns != null) result.addAll(spawns);
+        }
+        return result;
+    }
+
+    /** Get all spawns for team at base index k (1-based). */
+    public List<Location> getBaseSpawns(Team team, int k) {
+        List<Location> result = new ArrayList<>();
+        if (k < 1 || k > getBasesPerSide()) return result;
+        String roomId = "base" + k + team.name().toLowerCase(Locale.ROOT);
+        Map<Team, List<Location>> base = roomSpawns.get(roomId);
+        if (base != null) {
+            List<Location> spawns = base.get(team);
+            if (spawns != null) result.addAll(spawns);
+        }
+        return result;
+    }
+
+    // ================= VALIDATION =================
 
     /**
-     * Une arène SpaceShip est complètement configurée quand :
-     * - le lobby est défini
-     * - chaque équipe a au moins un spawn au Mid
-     * - chaque équipe a, pour CHAQUE base de 1 à basesPerSide, au moins un spawn ET un but défini
-     *
-     * (La gameZone reste optionnelle, comme pour HikaBrain : juste pour la protection/restauration.)
+     * Arène considérée comme entièrement configurée quand :
+     * - lobby défini
+     * - salle "mid" a un spawn ET un goal pour chaque équipe
+     * - pour chaque salle de base (base1black, base1white, …) :
+     *     • spawn pour black ET pour white
+     *     • goal pour black ET pour white
      */
     public boolean isFullyConfigured() {
         if (lobbySpawn == null) return false;
-        if (midSpawns.get(Team.BLACK).isEmpty() || midSpawns.get(Team.WHITE).isEmpty()) return false;
-        if (getMidGoal(Team.BLACK) == null || getMidGoal(Team.WHITE) == null) return false;
+        if (!roomFullyConfigured("mid")) return false;
 
         int n = getBasesPerSide();
-        for (Team team : Team.values()) {
-            for (int k = 1; k <= n; k++) {
-                if (getBaseSpawnCount(team, k) == 0) return false;
-                if (getBaseGoal(team, k) == null) return false;
+        for (int k = 1; k <= n; k++) {
+            for (Team t : Team.values()) {
+                String roomId = "base" + k + t.name().toLowerCase(Locale.ROOT);
+                if (!roomFullyConfigured(roomId)) return false;
             }
         }
         return true;
     }
 
-    // ================= SPAWNS : MID =================
-
-    public Location getMidSpawn(Team team) {
-        List<Location> spawns = midSpawns.get(team);
-        if (spawns == null || spawns.isEmpty()) return null;
-        if (spawns.size() == 1) return spawns.get(0);
-        return spawns.get(ThreadLocalRandom.current().nextInt(spawns.size()));
-    }
-
-    public List<Location> getMidSpawns(Team team) {
-        return Collections.unmodifiableList(midSpawns.get(team));
-    }
-
-    public int getMidSpawnCount(Team team) {
-        return midSpawns.get(team).size();
-    }
-
-    public boolean setMidSpawn(Team team, int index, Location loc) {
-        return setInList(midSpawns.get(team), index, loc);
-    }
-
-    public boolean removeMidSpawn(Team team, int index) {
-        return removeFromList(midSpawns.get(team), index);
-    }
-
-    // ================= SPAWNS : BASES =================
-
-    public Location getBaseSpawn(Team team, int baseIndex) {
-        List<Location> spawns = baseSpawns.get(team).get(baseIndex);
-        if (spawns == null || spawns.isEmpty()) return null;
-        if (spawns.size() == 1) return spawns.get(0);
-        return spawns.get(ThreadLocalRandom.current().nextInt(spawns.size()));
-    }
-
-    public List<Location> getBaseSpawns(Team team, int baseIndex) {
-        List<Location> spawns = baseSpawns.get(team).get(baseIndex);
-        return spawns == null ? Collections.emptyList() : Collections.unmodifiableList(spawns);
-    }
-
-    public int getBaseSpawnCount(Team team, int baseIndex) {
-        List<Location> spawns = baseSpawns.get(team).get(baseIndex);
-        return spawns == null ? 0 : spawns.size();
-    }
-
-    public boolean setBaseSpawn(Team team, int baseIndex, int index, Location loc) {
-        Map<Integer, List<Location>> perTeam = baseSpawns.get(team);
-        List<Location> spawns = perTeam.computeIfAbsent(baseIndex, k -> new ArrayList<>());
-        return setInList(spawns, index, loc);
-    }
-
-    public boolean removeBaseSpawn(Team team, int baseIndex, int index) {
-        List<Location> spawns = baseSpawns.get(team).get(baseIndex);
-        if (spawns == null) return false;
-        return removeFromList(spawns, index);
-    }
-
-    // ================= BUTS (ZONES DE CAPTURE) : BASES =================
-
-    public CuboidRegion getBaseGoal(Team team, int baseIndex) {
-        return baseGoals.get(team).get(baseIndex);
-    }
-
-    public void setBaseGoal(Team team, int baseIndex, CuboidRegion region) {
-        baseGoals.get(team).put(baseIndex, region);
-    }
-
-    public boolean isInBaseGoal(Team team, int baseIndex, Location loc) {
-        CuboidRegion region = getBaseGoal(team, baseIndex);
-        return region != null && region.contains(loc);
-    }
-
-    // ================= BUT (ZONE DE CAPTURE) : MID =================
-
-    public CuboidRegion getMidGoal(Team team) {
-        return midGoals.get(team);
-    }
-
-    public void setMidGoal(Team team, CuboidRegion region) {
-        midGoals.put(team, region);
-    }
-
-    public boolean isInMidGoal(Team team, Location loc) {
-        CuboidRegion region = getMidGoal(team);
-        return region != null && region.contains(loc);
-    }
-
-    // ================= BUTS : ACCESSEURS GÉNÉRIQUES (0 = Mid, 1..4 = Base<k>) =================
-
-    public CuboidRegion getZoneGoal(Team team, int baseIndex) {
-        return baseIndex == 0 ? getMidGoal(team) : getBaseGoal(team, baseIndex);
-    }
-
-    public void setZoneGoal(Team team, int baseIndex, CuboidRegion region) {
-        if (baseIndex == 0) {
-            setMidGoal(team, region);
-        } else {
-            setBaseGoal(team, baseIndex, region);
+    private boolean roomFullyConfigured(String roomId) {
+        for (Team t : Team.values()) {
+            if (getRoomSpawnCount(roomId, t) == 0) return false;
+            if (getRoomGoal(roomId, t) == null) return false;
         }
+        return true;
     }
 
-    public boolean isInZoneGoal(Team team, int baseIndex, Location loc) {
-        return baseIndex == 0 ? isInMidGoal(team, loc) : isInBaseGoal(team, baseIndex, loc);
+    // ================= SAVE / LOAD =================
+
+    public void saveToConfig(FileConfiguration config) {
+        saveLocation(config, "arena.lobby", lobbySpawn);
+        config.set("arena.zonecount", zoneCount);
+        if (maxPlayers > 0) config.set("arena.max-players", maxPlayers);
+        else config.set("arena.max-players", null);
+
+        config.set("arena.spawns", null);
+        for (Map.Entry<String, Map<Team, List<Location>>> re : roomSpawns.entrySet()) {
+            for (Map.Entry<Team, List<Location>> te : re.getValue().entrySet()) {
+                String base = "arena.spawns." + re.getKey() + "." + te.getKey().name().toLowerCase(Locale.ROOT);
+                saveSpawnList(config, base, te.getValue());
+            }
+        }
+
+        config.set("arena.goals", null);
+        for (Map.Entry<String, Map<Team, CuboidRegion>> re : roomGoals.entrySet()) {
+            for (Map.Entry<Team, CuboidRegion> te : re.getValue().entrySet()) {
+                String base = "arena.goals." + re.getKey() + "." + te.getKey().name().toLowerCase(Locale.ROOT);
+                saveRegion(config, base, te.getValue());
+            }
+        }
+
+        saveRegion(config, "arena.gamezone", gameZone);
     }
 
-    // ================= ACCESSEURS GÉNÉRIQUES PAR ZONEROLE =================
+    public void loadFromConfig(FileConfiguration config) {
+        this.lobbySpawn = loadLocation(config, "arena.lobby");
+        this.zoneCount = config.isSet("arena.zonecount") ? config.getInt("arena.zonecount") : 5;
+        if (zoneCount != 5 && zoneCount != 7 && zoneCount != 9) zoneCount = 5;
+        this.maxPlayers = config.isSet("arena.max-players") ? config.getInt("arena.max-players") : -1;
 
-    /**
-     * Renvoie un spawn (aléatoire parmi ceux configurés) pour la zone/équipe donnée.
-     * Pour MID, l'index de base est ignoré.
-     */
-    public Location getZoneSpawn(Team team, ZoneRole role) {
-        return role.isMid() ? getMidSpawn(team) : getBaseSpawn(team, role.getBaseIndex());
+        roomSpawns.clear();
+        ConfigurationSection spawnsSection = config.getConfigurationSection("arena.spawns");
+        if (spawnsSection != null) {
+            for (String roomId : spawnsSection.getKeys(false)) {
+                ConfigurationSection roomSection = spawnsSection.getConfigurationSection(roomId);
+                if (roomSection == null) continue;
+                for (String teamKey : roomSection.getKeys(false)) {
+                    Team team = teamFromKey(teamKey);
+                    if (team == null) continue;
+                    List<Location> locs = loadSpawnList(config,
+                            "arena.spawns." + roomId + "." + teamKey);
+                    if (!locs.isEmpty()) spawnList(roomId, team).addAll(locs);
+                }
+            }
+        }
+
+        roomGoals.clear();
+        ConfigurationSection goalsSection = config.getConfigurationSection("arena.goals");
+        if (goalsSection != null) {
+            for (String key : goalsSection.getKeys(false)) {
+                ConfigurationSection keySection = goalsSection.getConfigurationSection(key);
+                if (keySection == null) continue;
+                if (keySection.getConfigurationSection("corner1") != null) {
+                    // Ancien format (une génération avant l'ajout des goals par équipe) :
+                    // "arena.goals.<goalId>.corner1/corner2" où goalId était soit
+                    // "midblack"/"midwhite", soit le roomId d'une salle de base
+                    // (goal unique partagé par les deux équipes). On migre vers le
+                    // nouveau format afin de ne pas perdre les zones déjà configurées.
+                    CuboidRegion r = loadRegion(config, "arena.goals." + key);
+                    if (r == null) continue;
+                    migrateLegacyGoal(key, r);
+                } else {
+                    // Nouveau format : "arena.goals.<roomId>.<team>.corner1/corner2"
+                    for (String teamKey : keySection.getKeys(false)) {
+                        Team team = teamFromKey(teamKey);
+                        if (team == null) continue;
+                        CuboidRegion r = loadRegion(config, "arena.goals." + key + "." + teamKey);
+                        if (r != null) setRoomGoal(key, team, r);
+                    }
+                }
+            }
+        }
+
+        this.gameZone = loadRegion(config, "arena.gamezone");
     }
 
-    public int getZoneSpawnCount(Team team, ZoneRole role) {
-        return role.isMid() ? getMidSpawnCount(team) : getBaseSpawnCount(team, role.getBaseIndex());
-    }
-
-    public boolean setZoneSpawn(Team team, ZoneRole role, int index, Location loc) {
-        return role.isMid() ? setMidSpawn(team, index, loc) : setBaseSpawn(team, role.getBaseIndex(), index, loc);
-    }
-
-    public boolean removeZoneSpawn(Team team, ZoneRole role, int index) {
-        return role.isMid() ? removeMidSpawn(team, index) : removeBaseSpawn(team, role.getBaseIndex(), index);
-    }
-
-    // ================= UTILITAIRES LISTES (spawns 1-based, sans trous) =================
+    // ================= UTILITAIRES LISTE (index 1-based, sans trou) =================
 
     private boolean setInList(List<Location> list, int index, Location loc) {
         if (index < 1) return false;
-        if (index <= list.size()) {
-            list.set(index - 1, loc);
-            return true;
-        }
-        if (index == list.size() + 1) {
-            list.add(loc);
-            return true;
-        }
+        if (index <= list.size()) { list.set(index - 1, loc); return true; }
+        if (index == list.size() + 1) { list.add(loc); return true; }
         return false;
     }
 
@@ -297,98 +310,53 @@ public class Arena {
         return true;
     }
 
-    // ---- Sauvegarde / chargement dans un fichier de config ----
-
-    public void saveToConfig(FileConfiguration config) {
-        saveLocation(config, "arena.lobby", lobbySpawn);
-        config.set("arena.zonecount", zoneCount);
-
-        config.set("arena.mid", null);
-        saveSpawnList(config, "arena.mid.black", midSpawns.get(Team.BLACK));
-        saveSpawnList(config, "arena.mid.white", midSpawns.get(Team.WHITE));
-        saveRegion(config, "arena.mid.black.goal", midGoals.get(Team.BLACK));
-        saveRegion(config, "arena.mid.white.goal", midGoals.get(Team.WHITE));
-
-        config.set("arena.bases", null);
-        for (Team team : Team.values()) {
-            String teamKey = team.name().toLowerCase(java.util.Locale.ROOT);
-            for (int k = 1; k <= 4; k++) {
-                List<Location> spawns = baseSpawns.get(team).get(k);
-                if (spawns != null && !spawns.isEmpty()) {
-                    saveSpawnList(config, "arena.bases." + teamKey + ".base" + k + ".spawns", spawns);
-                }
-                CuboidRegion goal = baseGoals.get(team).get(k);
-                if (goal != null) {
-                    saveRegion(config, "arena.bases." + teamKey + ".base" + k + ".goal", goal);
-                }
-            }
-        }
-
-        saveRegion(config, "arena.gamezone", gameZone);
-        if (maxPlayers > 0) {
-            config.set("arena.max-players", maxPlayers);
-        } else {
-            config.set("arena.max-players", null);
+    /**
+     * Migre un ancien goalId à plat ("midblack", "midwhite", "base1black", ...) vers le
+     * nouveau modèle (un goal par équipe et par salle), en conservant la même zone.
+     * <ul>
+     *   <li>"midblack" était le goal que BLANC touchait pour marquer → devient le goal
+     *       de WHITE dans la salle "mid".</li>
+     *   <li>"midwhite" était le goal que NOIR touchait pour marquer → devient le goal
+     *       de BLACK dans la salle "mid".</li>
+     *   <li>Une salle de base ("base1black", "base1white", ...) avait un seul goal
+     *       partagé par les deux équipes → on l'assigne aux DEUX équipes dans cette
+     *       salle (même zone physique tant que l'admin n'en définit pas une nouvelle
+     *       par équipe).</li>
+     * </ul>
+     */
+    private void migrateLegacyGoal(String legacyGoalId, CuboidRegion region) {
+        if (legacyGoalId.equals("midblack")) {
+            setRoomGoal("mid", Team.WHITE, region);
+        } else if (legacyGoalId.equals("midwhite")) {
+            setRoomGoal("mid", Team.BLACK, region);
+        } else if (legacyGoalId.matches("base[1-4](black|white)")) {
+            setRoomGoal(legacyGoalId, Team.BLACK, region);
+            setRoomGoal(legacyGoalId, Team.WHITE, region);
         }
     }
 
-    public void loadFromConfig(FileConfiguration config) {
-        this.lobbySpawn = loadLocation(config, "arena.lobby");
-        this.zoneCount = config.isSet("arena.zonecount") ? config.getInt("arena.zonecount") : 5;
-        if (zoneCount != 5 && zoneCount != 7 && zoneCount != 9) {
-            zoneCount = 5;
-        }
-
-        midSpawns.get(Team.BLACK).clear();
-        midSpawns.get(Team.BLACK).addAll(loadSpawnList(config, "arena.mid.black"));
-        midSpawns.get(Team.WHITE).clear();
-        midSpawns.get(Team.WHITE).addAll(loadSpawnList(config, "arena.mid.white"));
-
-        midGoals.clear();
-        CuboidRegion blackMidGoal = loadRegion(config, "arena.mid.black.goal");
-        if (blackMidGoal != null) {
-            midGoals.put(Team.BLACK, blackMidGoal);
-        }
-        CuboidRegion whiteMidGoal = loadRegion(config, "arena.mid.white.goal");
-        if (whiteMidGoal != null) {
-            midGoals.put(Team.WHITE, whiteMidGoal);
-        }
-
-        for (Team team : Team.values()) {
-            baseSpawns.get(team).clear();
-            baseGoals.get(team).clear();
-            String teamKey = team.name().toLowerCase(java.util.Locale.ROOT);
-            for (int k = 1; k <= 4; k++) {
-                List<Location> spawns = loadSpawnList(config, "arena.bases." + teamKey + ".base" + k + ".spawns");
-                if (!spawns.isEmpty()) {
-                    baseSpawns.get(team).put(k, spawns);
-                }
-                CuboidRegion goal = loadRegion(config, "arena.bases." + teamKey + ".base" + k + ".goal");
-                if (goal != null) {
-                    baseGoals.get(team).put(k, goal);
-                }
-            }
-        }
-
-        this.gameZone = loadRegion(config, "arena.gamezone");
-        this.maxPlayers = config.isSet("arena.max-players") ? config.getInt("arena.max-players") : -1;
+    private static Team teamFromKey(String key) {
+        return switch (key.toLowerCase(Locale.ROOT)) {
+            case "black" -> Team.BLACK;
+            case "white" -> Team.WHITE;
+            default -> null;
+        };
     }
 
-    private void saveSpawnList(FileConfiguration config, String path, List<Location> spawns) {
-        for (int i = 0; i < spawns.size(); i++) {
-            saveLocation(config, path + "." + (i + 1), spawns.get(i));
-        }
+    // ---- Sérialisation ----
+
+    private void saveSpawnList(FileConfiguration config, String path, List<Location> list) {
+        for (int i = 0; i < list.size(); i++)
+            saveLocation(config, path + "." + (i + 1), list.get(i));
     }
 
     private List<Location> loadSpawnList(FileConfiguration config, String path) {
         List<Location> result = new ArrayList<>();
-        int index = 1;
-        while (config.isSet(path + "." + index + ".world")) {
-            Location loc = loadLocation(config, path + "." + index);
-            if (loc != null) {
-                result.add(loc);
-            }
-            index++;
+        int i = 1;
+        while (config.isSet(path + "." + i + ".world")) {
+            Location loc = loadLocation(config, path + "." + i);
+            if (loc != null) result.add(loc);
+            i++;
         }
         return result;
     }
@@ -399,28 +367,26 @@ public class Arena {
         config.set(path + ".x", loc.getX());
         config.set(path + ".y", loc.getY());
         config.set(path + ".z", loc.getZ());
-        config.set(path + ".yaw", loc.getYaw());
-        config.set(path + ".pitch", loc.getPitch());
+        config.set(path + ".yaw",   (double) loc.getYaw());
+        config.set(path + ".pitch", (double) loc.getPitch());
     }
 
     private Location loadLocation(FileConfiguration config, String path) {
         if (!config.isSet(path + ".world")) return null;
         World world = org.bukkit.Bukkit.getWorld(config.getString(path + ".world"));
         if (world == null) return null;
-        return new Location(
-                world,
+        return new Location(world,
                 config.getDouble(path + ".x"),
                 config.getDouble(path + ".y"),
                 config.getDouble(path + ".z"),
                 (float) config.getDouble(path + ".yaw"),
-                (float) config.getDouble(path + ".pitch")
-        );
+                (float) config.getDouble(path + ".pitch"));
     }
 
-    private void saveRegion(FileConfiguration config, String path, CuboidRegion region) {
-        if (region == null) return;
-        saveLocation(config, path + ".corner1", region.getCorner1());
-        saveLocation(config, path + ".corner2", region.getCorner2());
+    private void saveRegion(FileConfiguration config, String path, CuboidRegion r) {
+        if (r == null) return;
+        saveLocation(config, path + ".corner1", r.getCorner1());
+        saveLocation(config, path + ".corner2", r.getCorner2());
     }
 
     private CuboidRegion loadRegion(FileConfiguration config, String path) {
