@@ -90,6 +90,9 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             case "joinrandom" -> handleJoinRandom(sender);
             case "arenas" -> handleArenasGui(sender);
             case "leave" -> handleLeave(sender);
+            case "spectate" -> handleSpectate(sender, args);
+            case "unspectate" -> handleUnspectate(sender);
+            case "setspecspawn" -> handleSetSpecSpawn(sender, args);
             case "start" -> handleStart(sender, args);
             case "stop" -> handleStop(sender, args);
             case "info" -> handleInfo(sender, args);
@@ -651,6 +654,60 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
     }
 
 
+    private void handleSpectate(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, "&cCette commande doit être exécutée par un joueur.");
+            return;
+        }
+        if (args.length < 2) {
+            MessageUtil.send(sender, "&cUsage: /ss spectate <nom>");
+            return;
+        }
+        ArenaManager am = plugin.getArenaManager();
+        GameManager gm = am.get(args[1]);
+        if (gm == null) {
+            MessageUtil.send(sender, "&cAucune arène nommée '" + args[1] + "' n'existe.");
+            return;
+        }
+        if (am.findArenaOf(player) != null) {
+            MessageUtil.send(sender, "&cTu es déjà en train de jouer une partie. Fais /ss leave d'abord.");
+            return;
+        }
+        if (am.findSpectatingArenaOf(player) != null) {
+            MessageUtil.send(sender, "&cTu regardes déjà une arène en spectateur. Fais /ss unspectate d'abord.");
+            return;
+        }
+        gm.addSpectator(player);
+    }
+
+    private void handleUnspectate(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            MessageUtil.send(sender, "&cCette commande doit être exécutée par un joueur.");
+            return;
+        }
+        GameManager gm = plugin.getArenaManager().findSpectatingArenaOf(player);
+        if (gm == null) {
+            MessageUtil.send(sender, "&cTu n'es spectateur d'aucune arène en ce moment.");
+            return;
+        }
+        gm.removeSpectator(player);
+    }
+
+    private void handleSetSpecSpawn(CommandSender sender, String[] args) {
+        if (!checkAdminAndPlayer(sender)) return;
+        if (args.length < 3) {
+            MessageUtil.send(sender, "&cUsage: /ss setspecspawn <nom> <roomId>");
+            return;
+        }
+        GameManager gm = resolveArena(sender, args, 1);
+        if (gm == null) return;
+
+        Player player = (Player) sender;
+        gm.getArena().setRoomSpectatorSpawn(args[2], player.getLocation());
+        gm.saveArenaConfig();
+        MessageUtil.send(sender, "&aPoint de vue spectateur défini pour la salle '" + args[2] + "' sur l'arène '" + args[1] + "'.");
+    }
+
     // ================= ADMIN: START/STOP =================
 
     private void handleStart(CommandSender sender, String[] args) {
@@ -999,6 +1056,8 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
         MessageUtil.send(sender, "&e/ss join <nom> &7- Rejoindre une arène");
         MessageUtil.send(sender, "&e/ss joinrandom &7- Rejoindre une arène au hasard");
         MessageUtil.send(sender, "&e/ss leave &7- Quitter la partie en cours");
+        MessageUtil.send(sender, "&e/ss spectate <nom> &7- Regarder une partie en spectateur");
+        MessageUtil.send(sender, "&e/ss unspectate &7- Quitter le mode spectateur");
         MessageUtil.send(sender, "&e/ss list &7- Lister toutes les arènes");
         MessageUtil.send(sender, "&e/ss arenas &7- Ouvrir le menu pour rejoindre une arène");
         MessageUtil.send(sender, "&e/ss info [nom] &7- Voir l'état d'une arène");
@@ -1014,6 +1073,7 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
             MessageUtil.send(sender, "&c/ss setgoal <nom> <mid|base1black|base1white|...> <black|white> <pos1|pos2> &7- Définir le goal d'une équipe dans une salle");
             MessageUtil.send(sender, "&c/ss setgamezone <nom> <pos1|pos2> &7- Définir la zone de jeu (protection + restauration)");
             MessageUtil.send(sender, "&c/ss setmaxplayers <nom> <nombre> &7- Définir le nombre max de joueurs de l'arène (0 = global)");
+            MessageUtil.send(sender, "&c/ss setspecspawn <nom> <roomId> &7- Définir le point de vue spectateur d'une salle (à ta position)");
             MessageUtil.send(sender, "&c/ss start <nom> &7- Forcer le démarrage");
             MessageUtil.send(sender, "&c/ss stop <nom> &7- Forcer l'arrêt");
             MessageUtil.send(sender, "&c/ss resetstats &7- Réinitialiser les statistiques");
@@ -1033,9 +1093,9 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            List<String> options = new ArrayList<>(List.of("join", "joinrandom", "leave", "info", "list", "arenas", "stats", "top"));
+            List<String> options = new ArrayList<>(List.of("join", "joinrandom", "leave", "spectate", "unspectate", "info", "list", "arenas", "stats", "top"));
             if (sender.hasPermission("spaceship.admin")) {
-                options.addAll(List.of("create", "delete", "setlobby", "setzonecount", "setspawn", "delspawn", "setgoal", "setgamezone", "setmaxplayers", "start", "stop"));
+                options.addAll(List.of("create", "delete", "setlobby", "setzonecount", "setspawn", "delspawn", "setgoal", "setgamezone", "setmaxplayers", "setspecspawn", "start", "stop"));
                 options.addAll(List.of("setsbserver", "setsbgame", "setsbtitle", "setsblines", "reloadsb", "sbinfo"));
                 options.addAll(List.of("resetstats", "leaderboard"));
             }
@@ -1045,8 +1105,15 @@ public class SpaceShipCommand implements CommandExecutor, TabCompleter {
         String sub = args[0].toLowerCase(Locale.ROOT);
 
         // Le 2e argument est presque toujours un nom d'arène existant (sauf pour "create").
-        if (args.length == 2 && Set.of("join", "info", "delete", "setlobby", "setzonecount", "setspawn", "delspawn", "setgoal", "setgamezone", "setmaxplayers", "start", "stop").contains(sub)) {
+        if (args.length == 2 && Set.of("join", "info", "delete", "setlobby", "setzonecount", "setspawn", "delspawn", "setgoal", "setgamezone", "setmaxplayers", "setspecspawn", "start", "stop", "spectate").contains(sub)) {
             return filterStartingWith(new ArrayList<>(plugin.getArenaManager().getNames()), args[1]);
+        }
+
+        if (args.length == 3 && sub.equals("setspecspawn")) {
+            GameManager gm2 = plugin.getArenaManager().get(args[1]);
+            List<String> rooms = gm2 != null ? buildRoomIdList(gm2)
+                    : List.of("mid", "base1black", "base1white", "base2black", "base2white");
+            return filterStartingWith(rooms, args[2]);
         }
 
         if (args.length == 3 && sub.equals("setzonecount")) {

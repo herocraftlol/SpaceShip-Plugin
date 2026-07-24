@@ -207,8 +207,8 @@ public class ScoreboardManager {
         playerScoreboards.keySet().removeIf(uuid -> {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null) return true;
-            GameManager gm = plugin.getArenaManager().findArenaOf(player);
-            return gm == null || !gm.isPlaying(player);
+            GameManager gm = resolveGameManager(player);
+            return gm == null;
         });
         
         // Mettre à jour chaque scoreboard
@@ -216,13 +216,20 @@ public class ScoreboardManager {
             Player player = Bukkit.getPlayer(uuid);
             if (player == null) continue;
             
-            GameManager gm = plugin.getArenaManager().findArenaOf(player);
-            if (gm == null || !gm.isPlaying(player)) continue;
+            GameManager gm = resolveGameManager(player);
+            if (gm == null) continue;
             
             Scoreboard board = playerScoreboards.get(uuid);
             updatePlayerSidebar(board, player, gm);
             player.setScoreboard(board);
         }
+    }
+
+    /** Renvoie l'arène du joueur, qu'il y joue ou qu'il l'observe en spectateur. */
+    private GameManager resolveGameManager(Player player) {
+        GameManager gm = plugin.getArenaManager().findArenaOf(player);
+        if (gm != null) return gm;
+        return plugin.getArenaManager().findSpectatingArenaOf(player);
     }
 
     /**

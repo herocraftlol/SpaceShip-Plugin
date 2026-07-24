@@ -1,5 +1,5 @@
 name: SpaceShip
-version: 1.0.0
+version: 1.3.2
 main: com.spaceship.plugin.SpaceShipPlugin
 api-version: 1.21
 author: Claude
@@ -8,11 +8,15 @@ description: Plugin de minijeu SpaceShip (variante de HikaBrain à plusieurs zon
 commands:
   ss:
     description: Commande principale du plugin SpaceShip
-    usage: /ss <create|delete|list|arenas|setlobby|setzonecount|setspawn|delspawn|setgoal|setgamezone|start|stop|join|joinrandom|leave|info|stats|leaderboard>
+    usage: /ss <create|delete|list|arenas|setlobby|setzonecount|setspawn|delspawn|setgoal|setgamezone|setspecspawn|start|stop|join|joinrandom|leave|spectate|unspectate|info|stats|leaderboard>
     aliases: [spaceship]
   ssarenas:
     description: Ouvre le GUI de sélection d'arène SpaceShip
     usage: /ssarenas
+  sstournament:
+    description: Gère les tournois SpaceShip (bracket à élimination directe)
+    usage: /sstournament <create|join|leave|start|cancel|list|info>
+    aliases: [sstourney, sst]
 
 permissions:
   spaceship.admin:
@@ -21,3 +25,6 @@ permissions:
   spaceship.play:
     description: Permission pour jouer au SpaceShip
     default: true
+  spaceship.tournament.admin:
+    description: Permission pour créer/démarrer/annuler des tournois SpaceShip
+    default: op

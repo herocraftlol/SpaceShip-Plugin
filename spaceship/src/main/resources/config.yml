@@ -27,6 +27,13 @@ restore-pre-lobby-location: true
 restart-delay: 5
 
 # ===========================================
+#         Configuration Tournois
+# ===========================================
+tournament:
+  # Délai (secondes) entre deux tours du bracket, pour laisser les joueurs se préparer
+  prep-countdown: 15
+
+# ===========================================
 #         Configuration Scoreboard
 # ===========================================
 scoreboard:
