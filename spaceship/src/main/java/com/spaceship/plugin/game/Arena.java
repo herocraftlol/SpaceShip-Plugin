@@ -52,6 +52,15 @@ public class Arena {
      */
     private final Map<String, Map<Team, CuboidRegion>> roomGoals = new LinkedHashMap<>();
 
+    /**
+     * Points de vue dédiés pour les spectateurs, par salle (roomId).
+     * Optionnel : si aucun point n'est défini pour une salle, {@link GameManager}
+     * retombe automatiquement sur un point calculé (milieu des spawns des deux
+     * équipes de cette salle). Permet à un admin d'affiner la meilleure position
+     * d'observation (ex: surplomb) via /ss setspecspawn.
+     */
+    private final Map<String, Location> roomSpectatorSpawns = new LinkedHashMap<>();
+
     // ================= FRONTIER → ROOM =================
 
     /**
@@ -151,6 +160,22 @@ public class Arena {
         return r != null && r.contains(loc);
     }
 
+    // ================= SPECTATEURS =================
+
+    /** Définit (ou remplace) le point de vue spectateur dédié pour la salle {@code roomId}. */
+    public void setRoomSpectatorSpawn(String roomId, Location loc) {
+        roomSpectatorSpawns.put(roomId, loc);
+    }
+
+    /** Renvoie le point de vue spectateur dédié pour la salle {@code roomId}, ou null si non configuré. */
+    public Location getRoomSpectatorSpawn(String roomId) {
+        return roomSpectatorSpawns.get(roomId);
+    }
+
+    public void removeRoomSpectatorSpawn(String roomId) {
+        roomSpectatorSpawns.remove(roomId);
+    }
+
     // ================= VALIDATION =================
 
     /**
@@ -208,6 +233,11 @@ public class Arena {
         }
 
         saveRegion(config, "arena.gamezone", gameZone);
+
+        config.set("arena.specspawns", null);
+        for (Map.Entry<String, Location> e : roomSpectatorSpawns.entrySet()) {
+            saveLocation(config, "arena.specspawns." + e.getKey(), e.getValue());
+        }
     }
 
     public void loadFromConfig(FileConfiguration config) {
@@ -260,6 +290,15 @@ public class Arena {
         }
 
         this.gameZone = loadRegion(config, "arena.gamezone");
+
+        roomSpectatorSpawns.clear();
+        ConfigurationSection specSection = config.getConfigurationSection("arena.specspawns");
+        if (specSection != null) {
+            for (String roomId : specSection.getKeys(false)) {
+                Location loc = loadLocation(config, "arena.specspawns." + roomId);
+                if (loc != null) roomSpectatorSpawns.put(roomId, loc);
+            }
+        }
     }
 
     // ================= UTILITAIRES LISTE (index 1-based, sans trou) =================

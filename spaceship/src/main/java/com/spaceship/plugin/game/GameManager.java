@@ -88,6 +88,26 @@ public class GameManager {
     // Joueurs actuellement gelés (après une percée)
     private final Set<UUID> frozenPlayers = new HashSet<>();
 
+    // ================= SPECTATEURS =================
+
+    /** Joueurs actuellement en mode spectateur sur cette arène. */
+    private final Set<UUID> spectators = new HashSet<>();
+
+    /** Positions des spectateurs avant qu'ils ne rejoignent le mode spectateur (pour restauration). */
+    private final Map<UUID, Location> preSpectateLocations = new HashMap<>();
+
+    // ================= INTÉGRATION TOURNOI =================
+    // Permet au système de tournoi (com.spaceship.plugin.tournament) de réserver
+    // temporairement cette arène pour un match précis, d'y forcer des joueurs dans
+    // une équipe donnée (sans passer par l'équilibrage automatique), et d'être
+    // notifié du vainqueur une fois la partie terminée.
+
+    /** true si cette arène est actuellement réservée pour un match de tournoi (bloque les jointures publiques). */
+    private boolean reservedForTournament = false;
+
+    /** Callback appelé avec l'équipe gagnante dès qu'un match réservé se termine. */
+    private java.util.function.Consumer<Team> tournamentEndCallback = null;
+
     public GameManager(SpaceShipPlugin plugin, String arenaName) {
         this.plugin = plugin;
         this.arenaName = arenaName;
@@ -139,6 +159,11 @@ public class GameManager {
 
     public void loadArenaConfig() {
         arena.loadFromConfig(arenaConfig);
+        // Sans ceci, l'arène restait bloquée sur NOT_CONFIGURED (sa valeur par défaut)
+        // jusqu'à ce qu'un premier joueur la rejoigne, ce qui la faisait apparaître à tort
+        // comme "non configurée" (et donc invisible pour le système de tournoi) juste
+        // après un redémarrage du serveur.
+        state = arena.isFullyConfigured() ? GameState.WAITING : GameState.NOT_CONFIGURED;
     }
 
     public GameState getState() {
@@ -205,6 +230,10 @@ public class GameManager {
     }
 
     public boolean addPlayer(Player player) {
+        if (reservedForTournament) {
+            MessageUtil.send(player, "&cCette arène est réservée pour un match de tournoi, réessaie plus tard.");
+            return false;
+        }
         if (!arena.isFullyConfigured()) {
             MessageUtil.send(player, "&cLa map n'est pas encore configurée. Contacte un admin.");
             return false;
@@ -325,6 +354,208 @@ public class GameManager {
         player.getInventory().clear();
     }
 
+    // ================= INTÉGRATION TOURNOI (API PUBLIQUE) =================
+
+    /** Réserve cette arène : bloque les jointures publiques normales (utilisé pendant un match de tournoi). */
+    public void reserveForTournament() {
+        this.reservedForTournament = true;
+    }
+
+    /** Libère la réservation : l'arène redevient joignable normalement. */
+    public void releaseTournamentReservation() {
+        this.reservedForTournament = false;
+        this.tournamentEndCallback = null;
+    }
+
+    public boolean isReservedForTournament() {
+        return reservedForTournament;
+    }
+
+    /**
+     * Enregistre un callback appelé (avec l'équipe gagnante) dès que la partie en cours
+     * se termine. Utilisé par le TournamentManager pour savoir qui a gagné un match.
+     */
+    public void setTournamentEndCallback(java.util.function.Consumer<Team> callback) {
+        this.tournamentEndCallback = callback;
+    }
+
+    /**
+     * Ajoute un joueur directement dans l'équipe donnée, sans passer par l'équilibrage
+     * automatique ni les vérifications habituelles de jointure publique (lobby plein, partie
+     * en cours...). Réservé au système de tournoi : à utiliser uniquement sur une arène
+     * préalablement réservée via {@link #reserveForTournament()}.
+     */
+    public boolean addPlayerToTeam(Player player, Team team) {
+        if (!arena.isFullyConfigured()) {
+            return false;
+        }
+        playerTeams.put(player.getUniqueId(), team);
+        preLobbyLocations.put(player.getUniqueId(), player.getLocation().clone());
+        player.teleport(arena.getLobbySpawn());
+        preparePlayerForLobby(player);
+        plugin.getScoreboardManager().showScoreboard(player, this);
+        return true;
+    }
+
+    // ================= GESTION DES SPECTATEURS =================
+
+    public boolean isSpectating(Player player) {
+        return spectators.contains(player.getUniqueId());
+    }
+
+    public int getSpectatorCount() {
+        return spectators.size();
+    }
+
+    /** Renvoie une copie non modifiable des UUID actuellement en spectateur sur cette arène. */
+    public Set<UUID> getSpectatorUuids() {
+        return Collections.unmodifiableSet(new HashSet<>(spectators));
+    }
+
+    /**
+     * Identifiant de la salle actuellement "active" (là où se trouvent les joueurs) :
+     * la salle Base2 adverse pendant la phase de transit, sinon la salle déduite du
+     * frontier. Utilisé pour savoir où téléporter les spectateurs.
+     */
+    private String getCurrentRoomId() {
+        if (inTransitToBase2) {
+            return getBase2RoomFor(transitAttackingTeam);
+        }
+        return Arena.frontierToRoom(frontier);
+    }
+
+    /**
+     * Calcule le point de téléportation des spectateurs pour la salle {@code roomId} :
+     * 1. Le point dédié configuré via /ss setspecspawn pour cette salle, s'il existe.
+     * 2. Sinon, le milieu entre les spawns Noir et Blanc de cette salle (vue neutre),
+     *    surélevé de quelques blocs pour une meilleure vue d'ensemble.
+     * 3. Sinon, l'un des deux spawns de la salle (celui qui existe).
+     * 4. Sinon, le lobby de l'arène.
+     * Peut renvoyer null si rien de tout ça n'est configuré.
+     */
+    public Location getSpectatorTeleportLocation() {
+        String roomId = getCurrentRoomId();
+
+        Location dedicated = arena.getRoomSpectatorSpawn(roomId);
+        if (dedicated != null) {
+            return dedicated.clone();
+        }
+
+        Location blackSpawn = arena.getRoomSpawn(roomId, Team.BLACK);
+        Location whiteSpawn = arena.getRoomSpawn(roomId, Team.WHITE);
+        if (blackSpawn != null && whiteSpawn != null && blackSpawn.getWorld().equals(whiteSpawn.getWorld())) {
+            double x = (blackSpawn.getX() + whiteSpawn.getX()) / 2.0;
+            double y = Math.max(blackSpawn.getY(), whiteSpawn.getY()) + 3;
+            double z = (blackSpawn.getZ() + whiteSpawn.getZ()) / 2.0;
+            return new Location(blackSpawn.getWorld(), x, y, z);
+        }
+        if (blackSpawn != null) return blackSpawn.clone();
+        if (whiteSpawn != null) return whiteSpawn.clone();
+
+        if (arena.getLobbySpawn() != null) {
+            return arena.getLobbySpawn().clone();
+        }
+        return null;
+    }
+
+    /**
+     * Fait rejoindre un joueur en mode spectateur sur cette arène. Renvoie false si
+     * ce n'est pas possible (arène non configurée, joueur déjà engagé ailleurs...).
+     */
+    public boolean addSpectator(Player player) {
+        if (!arena.isFullyConfigured()) {
+            MessageUtil.send(player, "&cCette arène n'est pas encore configurée.");
+            return false;
+        }
+        if (isPlaying(player)) {
+            MessageUtil.send(player, "&cTu ne peux pas regarder cette partie en spectateur, tu y joues déjà.");
+            return false;
+        }
+        if (isSpectating(player)) {
+            MessageUtil.send(player, "&cTu regardes déjà cette partie en spectateur.");
+            return false;
+        }
+
+        Location teleportTo = getSpectatorTeleportLocation();
+        if (teleportTo == null) {
+            MessageUtil.send(player, "&cImpossible de spectate cette arène : aucun point de téléportation configuré.");
+            return false;
+        }
+
+        preSpectateLocations.put(player.getUniqueId(), player.getLocation().clone());
+        spectators.add(player.getUniqueId());
+
+        player.teleport(teleportTo);
+        player.setGameMode(GameMode.SPECTATOR);
+        player.getInventory().clear();
+        player.getInventory().setItem(KitManager.SPECTATOR_LEAVE_SLOT, KitManager.createSpectatorLeaveItem());
+
+        plugin.getScoreboardManager().showScoreboard(player, this);
+
+        MessageUtil.send(player, "&7Tu observes désormais la partie sur l'arène &f" + arenaName
+                + "&7. Tu seras téléporté automatiquement avec les joueurs à chaque changement de salle.");
+        MessageUtil.send(player, "&7Utilise &f/ss unspectate &7(ou l'item dans ton inventaire) pour repartir.");
+        return true;
+    }
+
+    /**
+     * Fait sortir un joueur du mode spectateur de cette arène et le renvoie à sa
+     * position d'avant, ou au lobby de l'arène si indisponible.
+     */
+    public void removeSpectator(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (!spectators.remove(uuid)) {
+            return;
+        }
+
+        player.setGameMode(GameMode.SURVIVAL);
+        player.getInventory().clear();
+        plugin.getScoreboardManager().removeScoreboard(player);
+
+        Location back = preSpectateLocations.remove(uuid);
+        if (back != null) {
+            player.teleport(back);
+        } else if (arena.getLobbySpawn() != null) {
+            player.teleport(arena.getLobbySpawn());
+        }
+
+        MessageUtil.send(player, "&7Tu as quitté le mode spectateur.");
+    }
+
+    /**
+     * Fait sortir tous les spectateurs de cette arène (utilisé quand l'arène est arrêtée
+     * de force, supprimée par un admin, ou quand la partie se termine).
+     */
+    private void removeAllSpectators() {
+        for (UUID uuid : new ArrayList<>(spectators)) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                removeSpectator(player);
+            } else {
+                spectators.remove(uuid);
+                preSpectateLocations.remove(uuid);
+            }
+        }
+    }
+
+    /**
+     * Téléporte tous les spectateurs actuels vers le point de vue de la salle active.
+     * Appelé à chaque fois que les joueurs eux-mêmes changent de salle (début de partie,
+     * round reset, transit/retour Base2), pour que les spectateurs suivent toujours
+     * l'action en direct comme sur HikaBrain, mais salle par salle sur le vaisseau.
+     */
+    private void teleportSpectatorsToCurrentRoom() {
+        if (spectators.isEmpty()) return;
+        Location loc = getSpectatorTeleportLocation();
+        if (loc == null) return;
+        for (UUID uuid : spectators) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.teleport(loc);
+            }
+        }
+    }
+
     // ================= LOBBY / COUNTDOWN =================
 
     private void checkLobbyStart() {
@@ -366,8 +597,25 @@ public class GameManager {
             if (countdownSecondsLeft <= 5 || countdownSecondsLeft % 10 == 0) {
                 broadcast("&e" + countdownSecondsLeft + "...");
             }
+            // Actionbar + son à chaque seconde, pour un compte à rebours bien visible
+            // même pour les joueurs qui ne suivent pas le chat (façon lobby HikaBrain).
+            sendActionBarToAll("&e&lDébut dans &6&l" + countdownSecondsLeft + "&e&ls");
+            float pitch = countdownSecondsLeft <= 3 ? 1.5f : 1.0f;
+            playSoundToAll(Sound.BLOCK_NOTE_BLOCK_HAT, 0.6f, pitch);
             countdownSecondsLeft--;
         }, 0L, 20L);
+    }
+
+    private void sendActionBarToAll(String rawMessage) {
+        String message = MessageUtil.format(rawMessage);
+        net.kyori.adventure.text.Component component =
+                net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().deserialize(message);
+        for (UUID uuid : playerTeams.keySet()) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.sendActionBar(component);
+            }
+        }
     }
 
     private void cancelCountdown() {
@@ -501,6 +749,7 @@ public class GameManager {
             player.setFoodLevel(20);
             KitManager.giveFullKit(player, team);
         }
+        teleportSpectatorsToCurrentRoom();
     }
 
     private void teleportAllForRoundReset() {
@@ -517,6 +766,7 @@ public class GameManager {
             player.setFoodLevel(20);
             KitManager.regiveGoldenApple(player);
         }
+        teleportSpectatorsToCurrentRoom();
     }
 
     /**
@@ -856,6 +1106,7 @@ public class GameManager {
             player.setFoodLevel(20);
             KitManager.regiveGoldenApple(player);
         }
+        teleportSpectatorsToCurrentRoom();
     }
 
     private void checkForfeit() {
@@ -875,12 +1126,24 @@ public class GameManager {
         if (state != GameState.PLAYING && state != GameState.ROUND_RESET) return;
         state = GameState.ENDING;
 
+        // Notifier le système de tournoi si ce match était un match de tournoi réservé.
+        // On retire le callback immédiatement pour éviter un double appel.
+        if (tournamentEndCallback != null) {
+            java.util.function.Consumer<Team> callback = tournamentEndCallback;
+            tournamentEndCallback = null;
+            callback.accept(winner);
+        }
+
         if (roundResetTask != null) {
             roundResetTask.cancel();
             roundResetTask = null;
         }
 
         stopCaptureScheduler();
+
+        // La partie est terminée : on fait automatiquement sortir tous les spectateurs
+        // du mode spectateur (ils sont renvoyés à leur position d'avant).
+        removeAllSpectators();
 
         int teamSize = Math.max(getPlayerCountForTeam(Team.BLACK), getPlayerCountForTeam(Team.WHITE));
         plugin.getStatsManager().addWin(winner, teamSize);
@@ -958,6 +1221,7 @@ public class GameManager {
             offhandReplenishTask.cancel();
             offhandReplenishTask = null;
         }
+        removeAllSpectators();
         unfreezeAllPlayers();
         clearColoredNames(playerTeams.keySet());
         for (UUID uuid : new ArrayList<>(playerTeams.keySet())) {

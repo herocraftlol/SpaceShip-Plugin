@@ -25,6 +25,10 @@ public class PlayerConnectionListener implements Listener {
         if (gameManager != null) {
             gameManager.removePlayer(player);
         }
+        GameManager spectating = plugin.getArenaManager().findSpectatingArenaOf(player);
+        if (spectating != null) {
+            spectating.removeSpectator(player);
+        }
         // Supprimer le scoreboard du joueur
         if (plugin.getScoreboardManager() != null) {
             plugin.getScoreboardManager().removeScoreboard(player);

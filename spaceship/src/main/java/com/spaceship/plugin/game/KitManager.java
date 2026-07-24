@@ -29,6 +29,9 @@ public final class KitManager {
     public static final int FORCESTART_SLOT = 0;
     public static final int TEAM_SELECT_SLOT = 2;
     public static final int LEAVE_SLOT = 4;
+
+    // Slot pour le mode spectateur
+    public static final int SPECTATOR_LEAVE_SLOT = 8;
     
     // Slots pour le jeu (pas de décalage car le lobby utilise des slots différents)
     private static final int SWORD_SLOT = 0;
@@ -54,6 +57,9 @@ public final class KitManager {
      */
     private static NamespacedKey leaveKey;
 
+    /** Clé persistante pour identifier l'item "quitter le mode spectateur". */
+    private static NamespacedKey spectatorLeaveKey;
+
     private KitManager() {
     }
 
@@ -61,6 +67,7 @@ public final class KitManager {
         forceStartKey = new NamespacedKey(plugin, "force_start_item");
         teamSelectorKey = new NamespacedKey(plugin, "team_selector_item");
         leaveKey = new NamespacedKey(plugin, "leave_item");
+        spectatorLeaveKey = new NamespacedKey(plugin, "spectator_leave_item");
     }
 
     /**
@@ -189,6 +196,31 @@ public final class KitManager {
         }
         ItemMeta meta = item.getItemMeta();
         return meta != null && meta.getPersistentDataContainer().has(leaveKey, PersistentDataType.BYTE);
+    }
+
+    /**
+     * Crée l'item "quitter le mode spectateur" (barrier block) placé en slot 8 de l'inventaire
+     * spectateur. Un clic déclenche directement /ss unspectate, comme raccourci visuel.
+     */
+    public static ItemStack createSpectatorLeaveItem() {
+        ItemStack item = new ItemStack(Material.BARRIER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(ChatColor.RED + "" + ChatColor.BOLD + "Quitter le mode spectateur");
+            meta.setLore(java.util.List.of(ChatColor.GRAY + "Clique pour faire /ss unspectate"));
+            meta.getPersistentDataContainer().set(spectatorLeaveKey, PersistentDataType.BYTE, (byte) 1);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** Détermine si l'ItemStack donné est l'item "quitter le mode spectateur". */
+    public static boolean isSpectatorLeaveItem(ItemStack item) {
+        if (item == null || item.getType() != Material.BARRIER || !item.hasItemMeta()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && meta.getPersistentDataContainer().has(spectatorLeaveKey, PersistentDataType.BYTE);
     }
 
     /**
